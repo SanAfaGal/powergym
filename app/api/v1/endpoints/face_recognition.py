@@ -17,7 +17,31 @@ from uuid import UUID
 
 router = APIRouter()
 
-@router.post("/register", response_model=FaceRegistrationResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=FaceRegistrationResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register face biometric",
+    description="Register a client's face biometric data for facial recognition.",
+    responses={
+        201: {
+            "description": "Face registered successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "message": "Face registered successfully",
+                        "biometric_id": "123e4567-e89b-12d3-a456-426614174000",
+                        "client_id": "987fcdeb-51a2-43f1-9876-543210fedcba"
+                    }
+                }
+            }
+        },
+        400: {"description": "Invalid image or no face detected"},
+        404: {"description": "Client not found"},
+        401: {"description": "Not authenticated"}
+    }
+)
 async def register_client_face(
     request: FaceRegistrationRequest,
     current_user: User = Depends(get_current_user)
@@ -53,7 +77,34 @@ async def register_client_face(
         client_id=result.get("client_id")
     )
 
-@router.post("/authenticate", response_model=FaceAuthenticationResponse)
+@router.post(
+    "/authenticate",
+    response_model=FaceAuthenticationResponse,
+    summary="Authenticate with face",
+    description="Authenticate a client by comparing their face with registered biometrics.",
+    responses={
+        200: {
+            "description": "Face authenticated successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "message": "Face authenticated successfully",
+                        "client_id": "987fcdeb-51a2-43f1-9876-543210fedcba",
+                        "client_info": {
+                            "first_name": "Juan",
+                            "last_name": "Pérez",
+                            "dni_number": "12345678"
+                        },
+                        "confidence": 0.95
+                    }
+                }
+            }
+        },
+        401: {"description": "Authentication failed - no matching face found"},
+        400: {"description": "Invalid image or no face detected"}
+    }
+)
 async def authenticate_client_face(
     request: FaceAuthenticationRequest,
     current_user: User = Depends(get_current_user)
@@ -76,7 +127,30 @@ async def authenticate_client_face(
         confidence=result.get("confidence")
     )
 
-@router.post("/compare", response_model=FaceComparisonResponse)
+@router.post(
+    "/compare",
+    response_model=FaceComparisonResponse,
+    summary="Compare two faces",
+    description="Compare two face images to determine if they belong to the same person.",
+    responses={
+        200: {
+            "description": "Faces compared successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "message": "Faces compared successfully",
+                        "match": True,
+                        "distance": 0.35,
+                        "confidence": 0.92
+                    }
+                }
+            }
+        },
+        400: {"description": "Invalid images or no faces detected"},
+        401: {"description": "Not authenticated"}
+    }
+)
 async def compare_faces(
     request: FaceComparisonRequest,
     current_user: User = Depends(get_current_user)
@@ -100,7 +174,30 @@ async def compare_faces(
         confidence=result.get("confidence")
     )
 
-@router.put("/update", response_model=FaceRegistrationResponse)
+@router.put(
+    "/update",
+    response_model=FaceRegistrationResponse,
+    summary="Update face biometric",
+    description="Update a client's face biometric data with a new image.",
+    responses={
+        200: {
+            "description": "Face updated successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "message": "Face updated successfully",
+                        "biometric_id": "123e4567-e89b-12d3-a456-426614174000",
+                        "client_id": "987fcdeb-51a2-43f1-9876-543210fedcba"
+                    }
+                }
+            }
+        },
+        400: {"description": "Invalid image or no face detected"},
+        404: {"description": "Client not found"},
+        401: {"description": "Not authenticated"}
+    }
+)
 async def update_client_face(
     request: FaceUpdateRequest,
     current_user: User = Depends(get_current_user)
@@ -136,7 +233,28 @@ async def update_client_face(
         client_id=result.get("client_id")
     )
 
-@router.delete("/{client_id}", response_model=FaceDeleteResponse)
+@router.delete(
+    "/{client_id}",
+    response_model=FaceDeleteResponse,
+    summary="Delete face biometric",
+    description="Delete all face biometric data for a specific client.",
+    responses={
+        200: {
+            "description": "Face biometric deleted successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "message": "Face biometric deleted successfully"
+                    }
+                }
+            }
+        },
+        404: {"description": "Client not found"},
+        400: {"description": "Failed to delete face biometric"},
+        401: {"description": "Not authenticated"}
+    }
+)
 async def delete_client_face(
     client_id: UUID,
     current_user: User = Depends(get_current_user)

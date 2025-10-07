@@ -12,3 +12,13 @@ class TokenPayload(BaseModel):
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJqb2huX2RvZSIsImV4cCI6MTcyODMyMTYwMCwidHlwZSI6InJlZnJlc2gifQ.example_signature"
+                }
+            ]
+        }
+    }

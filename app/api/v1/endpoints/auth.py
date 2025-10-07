@@ -16,7 +16,31 @@ from app.api.dependencies import get_current_user, get_current_active_user
 
 router = APIRouter()
 
-@router.post("/register", response_model=User, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=User,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register a new user",
+    description="Create a new user account. Only administrators can register new users.",
+    responses={
+        201: {
+            "description": "User successfully registered",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "username": "john_doe",
+                        "email": "john@example.com",
+                        "full_name": "John Doe",
+                        "role": "user",
+                        "disabled": False
+                    }
+                }
+            }
+        },
+        400: {"description": "Username or email already exists"},
+        403: {"description": "Only administrators can register new users"}
+    }
+)
 async def register(
     user_data: UserCreate,
     current_user: Annotated[UserInDB, Depends(get_current_user)]
@@ -44,7 +68,28 @@ async def register(
     new_user = UserService.create_user(user_data)
     return new_user
 
-@router.post("/token", response_model=Token)
+@router.post(
+    "/token",
+    response_model=Token,
+    summary="Login to get access token",
+    description="Authenticate user and receive access and refresh tokens.",
+    responses={
+        200: {
+            "description": "Successful login",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                        "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                        "token_type": "bearer"
+                    }
+                }
+            }
+        },
+        401: {"description": "Incorrect username or password"},
+        400: {"description": "Inactive user"}
+    }
+)
 async def login(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
 ):
@@ -80,7 +125,26 @@ async def login(
         token_type="bearer"
     )
 
-@router.post("/refresh", response_model=Token)
+@router.post(
+    "/refresh",
+    response_model=Token,
+    summary="Refresh access token",
+    description="Get a new access token using a valid refresh token.",
+    responses={
+        200: {
+            "description": "Token refreshed successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                        "token_type": "bearer"
+                    }
+                }
+            }
+        },
+        401: {"description": "Invalid or expired refresh token"}
+    }
+)
 async def refresh_token(refresh_request: RefreshTokenRequest):
     payload = decode_token(refresh_request.refresh_token)
 
@@ -115,13 +179,51 @@ async def refresh_token(refresh_request: RefreshTokenRequest):
         token_type="bearer"
     )
 
-@router.post("/logout", status_code=status.HTTP_200_OK)
+@router.post(
+    "/logout",
+    status_code=status.HTTP_200_OK,
+    summary="Logout user",
+    description="Logout the current authenticated user.",
+    responses={
+        200: {
+            "description": "Successfully logged out",
+            "content": {
+                "application/json": {
+                    "example": {"message": "Successfully logged out"}
+                }
+            }
+        },
+        401: {"description": "Not authenticated"}
+    }
+)
 async def logout(
     current_user: Annotated[User, Depends(get_current_active_user)]
 ):
     return {"message": "Successfully logged out"}
 
-@router.get("/me", response_model=User)
+@router.get(
+    "/me",
+    response_model=User,
+    summary="Get current user",
+    description="Retrieve the profile of the currently authenticated user.",
+    responses={
+        200: {
+            "description": "Current user profile",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "username": "john_doe",
+                        "email": "john@example.com",
+                        "full_name": "John Doe",
+                        "role": "user",
+                        "disabled": False
+                    }
+                }
+            }
+        },
+        401: {"description": "Not authenticated"}
+    }
+)
 async def get_auth_user(
     current_user: Annotated[User, Depends(get_current_active_user)]
 ):

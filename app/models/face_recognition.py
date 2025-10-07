@@ -13,6 +13,17 @@ class FaceRegistrationRequest(BaseModel):
             raise ValueError('Image data cannot be empty')
         return v.strip()
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "client_id": "123e4567-e89b-12d3-a456-426614174000",
+                    "image_base64": "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/..."
+                }
+            ]
+        }
+    }
+
 class FaceRegistrationResponse(BaseModel):
     success: bool
     message: str
@@ -28,6 +39,16 @@ class FaceAuthenticationRequest(BaseModel):
         if not v or len(v.strip()) == 0:
             raise ValueError('Image data cannot be empty')
         return v.strip()
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "image_base64": "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/..."
+                }
+            ]
+        }
+    }
 
 class FaceAuthenticationResponse(BaseModel):
     success: bool
@@ -47,6 +68,17 @@ class FaceComparisonRequest(BaseModel):
             raise ValueError('Image data cannot be empty')
         return v.strip()
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "image_base64_1": "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/...",
+                    "image_base64_2": "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/..."
+                }
+            ]
+        }
+    }
+
 class FaceComparisonResponse(BaseModel):
     success: bool
     message: str
@@ -64,6 +96,17 @@ class FaceUpdateRequest(BaseModel):
         if not v or len(v.strip()) == 0:
             raise ValueError('Image data cannot be empty')
         return v.strip()
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "client_id": "123e4567-e89b-12d3-a456-426614174000",
+                    "image_base64": "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/..."
+                }
+            ]
+        }
+    }
 
 class FaceDeleteResponse(BaseModel):
     success: bool

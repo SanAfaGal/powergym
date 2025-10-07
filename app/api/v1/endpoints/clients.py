@@ -8,7 +8,36 @@ from typing import List
 
 router = APIRouter()
 
-@router.post("/", response_model=Client, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=Client,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new client",
+    description="Register a new client in the system.",
+    responses={
+        201: {
+            "description": "Client successfully created",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "id": "123e4567-e89b-12d3-a456-426614174000",
+                        "first_name": "Juan",
+                        "last_name": "Pérez",
+                        "dni_type": "DNI",
+                        "dni_number": "12345678",
+                        "email": "juan.perez@example.com",
+                        "phone": "+51987654321",
+                        "is_active": True,
+                        "created_at": "2025-10-07T10:30:00Z",
+                        "updated_at": "2025-10-07T10:30:00Z"
+                    }
+                }
+            }
+        },
+        400: {"description": "Client with this DNI already exists"},
+        401: {"description": "Not authenticated"}
+    }
+)
 def create_client(
     client_data: ClientCreate,
     current_user: User = Depends(get_current_active_user)
@@ -29,7 +58,36 @@ def create_client(
 
     return client
 
-@router.get("/", response_model=List[Client])
+@router.get(
+    "/",
+    response_model=List[Client],
+    summary="List all clients",
+    description="Retrieve a paginated list of clients with optional filtering.",
+    responses={
+        200: {
+            "description": "List of clients",
+            "content": {
+                "application/json": {
+                    "example": [
+                        {
+                            "id": "123e4567-e89b-12d3-a456-426614174000",
+                            "first_name": "Juan",
+                            "last_name": "Pérez",
+                            "dni_type": "DNI",
+                            "dni_number": "12345678",
+                            "email": "juan.perez@example.com",
+                            "phone": "+51987654321",
+                            "is_active": True,
+                            "created_at": "2025-10-07T10:30:00Z",
+                            "updated_at": "2025-10-07T10:30:00Z"
+                        }
+                    ]
+                }
+            }
+        },
+        401: {"description": "Not authenticated"}
+    }
+)
 def list_clients(
     is_active: bool | None = None,
     limit: int = Query(100, ge=1, le=500),
@@ -43,16 +101,73 @@ def list_clients(
     )
     return clients
 
-@router.get("/search", response_model=List[Client])
+@router.get(
+    "/search",
+    response_model=List[Client],
+    summary="Search clients",
+    description="Search clients by name, DNI, email, or phone.",
+    responses={
+        200: {
+            "description": "Search results",
+            "content": {
+                "application/json": {
+                    "example": [
+                        {
+                            "id": "123e4567-e89b-12d3-a456-426614174000",
+                            "first_name": "Juan",
+                            "last_name": "Pérez",
+                            "dni_type": "DNI",
+                            "dni_number": "12345678",
+                            "email": "juan.perez@example.com",
+                            "phone": "+51987654321",
+                            "is_active": True,
+                            "created_at": "2025-10-07T10:30:00Z",
+                            "updated_at": "2025-10-07T10:30:00Z"
+                        }
+                    ]
+                }
+            }
+        },
+        401: {"description": "Not authenticated"}
+    }
+)
 def search_clients(
-    q: str = Query(..., min_length=1, description="Término de búsqueda"),
+    q: str = Query(..., min_length=1, description="Search term"),
     limit: int = Query(50, ge=1, le=100),
     current_user: User = Depends(get_current_active_user)
 ):
     clients = ClientService.search_clients(search_term=q, limit=limit)
     return clients
 
-@router.get("/dni/{dni_number}", response_model=Client)
+@router.get(
+    "/dni/{dni_number}",
+    response_model=Client,
+    summary="Get client by DNI",
+    description="Retrieve a specific client by their DNI number.",
+    responses={
+        200: {
+            "description": "Client found",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "id": "123e4567-e89b-12d3-a456-426614174000",
+                        "first_name": "Juan",
+                        "last_name": "Pérez",
+                        "dni_type": "DNI",
+                        "dni_number": "12345678",
+                        "email": "juan.perez@example.com",
+                        "phone": "+51987654321",
+                        "is_active": True,
+                        "created_at": "2025-10-07T10:30:00Z",
+                        "updated_at": "2025-10-07T10:30:00Z"
+                    }
+                }
+            }
+        },
+        404: {"description": "Client not found"},
+        401: {"description": "Not authenticated"}
+    }
+)
 def get_client_by_dni(
     dni_number: str,
     current_user: User = Depends(get_current_active_user)

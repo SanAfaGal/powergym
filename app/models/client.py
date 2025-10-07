@@ -42,7 +42,25 @@ class ClientBase(BaseModel):
         return v.strip()
 
 class ClientCreate(ClientBase):
-    pass
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "dni_type": "CC",
+                    "dni_number": "1234567890",
+                    "first_name": "Juan",
+                    "middle_name": "Carlos",
+                    "last_name": "Pérez",
+                    "second_last_name": "González",
+                    "phone": "+573001234567",
+                    "alternative_phone": "+573109876543",
+                    "birth_date": "1990-05-15",
+                    "gender": "male",
+                    "address": "Calle 123 #45-67, Bogotá"
+                }
+            ]
+        }
+    }
 
 class ClientUpdate(BaseModel):
     dni_type: DocumentType | None = None
@@ -57,6 +75,18 @@ class ClientUpdate(BaseModel):
     gender: GenderType | None = None
     address: str | None = None
     is_active: bool | None = None
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "phone": "+573001111111",
+                    "address": "Carrera 7 #32-16, Medellín",
+                    "is_active": True
+                }
+            ]
+        }
+    }
 
 class Client(ClientBase):
     id: UUID
