@@ -9,7 +9,7 @@ from app.models.face_recognition import (
     FaceUpdateRequest,
     FaceDeleteResponse
 )
-from app.services.face_recognition_service import FaceRecognitionService
+from app.services.face_recognition.core import FaceRecognitionService
 from app.services.client_service import ClientService
 from app.api.dependencies import get_current_user
 from app.models.user import User

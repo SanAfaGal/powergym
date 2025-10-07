@@ -6,7 +6,7 @@ from app.models.biometric import (
     BiometricType,
     BiometricSearchResult
 )
-from app.services.biometric_service import BiometricService
+from app.services.biometric.core import BiometricService
 from app.api.dependencies import get_current_user
 from app.models.user import User
 from uuid import UUID
