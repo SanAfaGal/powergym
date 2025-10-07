@@ -6,6 +6,7 @@ from PIL import Image
 from typing import Optional, List, Tuple
 from app.core.config import settings
 from app.core.database import get_supabase_client
+from app.core.encryption import get_encryption_service
 from app.models.biometric import BiometricType
 from uuid import UUID
 from app.core.async_processing import run_in_threadpool
@@ -199,19 +200,23 @@ class FaceRecognitionService:
                     "is_active": False
                 }).eq("id", existing_response.data["id"]).execute()
 
-            compressed_data_b64 = base64.b64encode(compressed_data).decode('utf-8')
-            thumbnail_b64 = base64.b64encode(thumbnail).decode('utf-8')
+            encryption_service = get_encryption_service()
+
+            encrypted_embedding = encryption_service.encrypt_embedding(embedding)
+            encrypted_compressed_data = encryption_service.encrypt_image_data(compressed_data)
+            encrypted_thumbnail = encryption_service.encrypt_image_data(thumbnail)
 
             biometric_data = {
                 "client_id": str(client_id),
                 "type": BiometricType.FACE.value,
-                "compressed_data": compressed_data_b64,
-                "thumbnail": thumbnail_b64,
-                "embedding": embedding,
+                "compressed_data": encrypted_compressed_data,
+                "thumbnail": encrypted_thumbnail,
+                "embedding": encrypted_embedding,
                 "is_active": True,
                 "meta_info": {
-                    "encoding_version": "face_recognition_v1",
-                    "model": settings.FACE_RECOGNITION_MODEL
+                    "encoding_version": "face_recognition_v1_encrypted",
+                    "model": settings.FACE_RECOGNITION_MODEL,
+                    "encryption": "AES-256-GCM"
                 }
             }
 
@@ -245,7 +250,7 @@ class FaceRecognitionService:
             supabase = get_supabase_client()
 
             response = supabase.table("client_biometrics").select(
-                "id, client_id, embedding"
+                "id, client_id, embedding, meta_info"
             ).eq("type", BiometricType.FACE.value).eq("is_active", True).execute()
 
             if not response or not response.data:
@@ -254,6 +259,7 @@ class FaceRecognitionService:
                     "error": "No registered faces found in the system"
                 }
 
+            encryption_service = get_encryption_service()
             best_match = None
             best_distance = float('inf')
 
@@ -262,7 +268,13 @@ class FaceRecognitionService:
                     continue
 
                 try:
-                    stored_embedding = FaceRecognitionService._parse_embedding(biometric["embedding"])
+                    meta_info = biometric.get("meta_info", {})
+                    is_encrypted = "encrypted" in meta_info.get("encoding_version", "")
+
+                    if is_encrypted:
+                        stored_embedding = encryption_service.decrypt_embedding(biometric["embedding"])
+                    else:
+                        stored_embedding = FaceRecognitionService._parse_embedding(biometric["embedding"])
                 except ValueError as parse_error:
                     continue
 

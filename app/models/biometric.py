@@ -10,47 +10,26 @@ class BiometricType(str, Enum):
 class BiometricBase(BaseModel):
     client_id: UUID
     type: BiometricType
-    compressed_data: bytes
-    thumbnail: Optional[bytes] = None
-    embedding: Optional[list[float]] = None
+    compressed_data: str
+    thumbnail: Optional[str] = None
+    embedding: Optional[str] = None
     is_active: bool = True
     meta_info: dict = {}
-
-    @field_validator('embedding')
-    @classmethod
-    def validate_embedding(cls, v: Optional[list[float]]) -> Optional[list[float]]:
-        if v is not None and len(v) != 512:
-            raise ValueError('Embedding must have exactly 512 dimensions')
-        return v
 
 class BiometricCreate(BaseModel):
     client_id: UUID
     type: BiometricType
-    compressed_data: bytes
-    thumbnail: Optional[bytes] = None
-    embedding: Optional[list[float]] = None
+    compressed_data: str
+    thumbnail: Optional[str] = None
+    embedding: Optional[str] = None
     meta_info: dict = {}
 
-    @field_validator('embedding')
-    @classmethod
-    def validate_embedding(cls, v: Optional[list[float]]) -> Optional[list[float]]:
-        if v is not None and len(v) != 512:
-            raise ValueError('Embedding must have exactly 512 dimensions')
-        return v
-
 class BiometricUpdate(BaseModel):
-    compressed_data: Optional[bytes] = None
-    thumbnail: Optional[bytes] = None
-    embedding: Optional[list[float]] = None
+    compressed_data: Optional[str] = None
+    thumbnail: Optional[str] = None
+    embedding: Optional[str] = None
     is_active: Optional[bool] = None
     meta_info: Optional[dict] = None
-
-    @field_validator('embedding')
-    @classmethod
-    def validate_embedding(cls, v: Optional[list[float]]) -> Optional[list[float]]:
-        if v is not None and len(v) != 512:
-            raise ValueError('Embedding must have exactly 512 dimensions')
-        return v
 
 class Biometric(BiometricBase):
     id: UUID

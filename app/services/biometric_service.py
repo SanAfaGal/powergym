@@ -1,123 +1,228 @@
+import base64
+from typing import Optional, List
+from uuid import UUID
+from app.core.database import get_supabase_client
+from app.core.encryption import get_encryption_service
 from app.models.biometric import (
-    Biometric,
     BiometricCreate,
     BiometricUpdate,
+    Biometric,
     BiometricType,
     BiometricSearchResult
 )
-from app.core.database import get_supabase_client
-from uuid import UUID
-from typing import List, Optional
-import base64
+
 
 class BiometricService:
+    """
+    Service for managing biometric data with encryption support.
+    Handles storage, retrieval, and search of encrypted biometric information.
+    """
+
     @staticmethod
     def create_biometric(biometric_data: BiometricCreate) -> Optional[Biometric]:
-        supabase = get_supabase_client()
+        """
+        Create a new biometric record with encrypted data.
 
-        biometric_dict = {
-            "client_id": str(biometric_data.client_id),
-            "type": biometric_data.type.value,
-            "compressed_data": base64.b64encode(biometric_data.compressed_data).decode('utf-8'),
-            "is_active": True,
-            "meta_info": biometric_data.meta_info
-        }
+        Args:
+            biometric_data: Biometric data to create
 
-        if biometric_data.thumbnail:
-            biometric_dict["thumbnail"] = base64.b64encode(biometric_data.thumbnail).decode('utf-8')
+        Returns:
+            Created Biometric object or None if failed
+        """
+        try:
+            supabase = get_supabase_client()
+            encryption_service = get_encryption_service()
 
-        if biometric_data.embedding:
-            biometric_dict["embedding"] = biometric_data.embedding
+            encrypted_compressed_data = encryption_service.encrypt_image_data(
+                biometric_data.compressed_data
+            )
 
-        response = supabase.table("client_biometrics").insert(biometric_dict).execute()
+            encrypted_thumbnail = None
+            if biometric_data.thumbnail:
+                encrypted_thumbnail = encryption_service.encrypt_image_data(
+                    biometric_data.thumbnail
+                )
 
-        if response and response.data:
-            return BiometricService._parse_biometric(response.data[0])
-        return None
+            encrypted_embedding = None
+            if biometric_data.embedding:
+                encrypted_embedding = encryption_service.encrypt_embedding(
+                    biometric_data.embedding
+                )
+
+            meta_info = biometric_data.meta_info.copy()
+            meta_info["encryption"] = "AES-256-GCM"
+
+            data = {
+                "client_id": str(biometric_data.client_id),
+                "type": biometric_data.type.value,
+                "compressed_data": encrypted_compressed_data,
+                "thumbnail": encrypted_thumbnail,
+                "embedding": encrypted_embedding,
+                "is_active": True,
+                "meta_info": meta_info
+            }
+
+            response = supabase.table("client_biometrics").insert(data).execute()
+
+            if response and response.data:
+                record = response.data[0]
+                return BiometricService._decrypt_biometric_record(record)
+
+            return None
+        except Exception as e:
+            print(f"Error creating biometric: {str(e)}")
+            return None
 
     @staticmethod
-    def get_biometric_by_id(biometric_id: UUID) -> Optional[Biometric]:
-        supabase = get_supabase_client()
+    def get_biometric(biometric_id: UUID) -> Optional[Biometric]:
+        """
+        Retrieve a biometric record by ID and decrypt it.
 
-        response = supabase.table("client_biometrics").select("*").eq("id", str(biometric_id)).maybe_single().execute()
+        Args:
+            biometric_id: UUID of the biometric record
 
-        if response and response.data:
-            return BiometricService._parse_biometric(response.data)
-        return None
+        Returns:
+            Decrypted Biometric object or None if not found
+        """
+        try:
+            supabase = get_supabase_client()
+
+            response = supabase.table("client_biometrics").select(
+                "*"
+            ).eq("id", str(biometric_id)).maybe_single().execute()
+
+            if response and response.data:
+                return BiometricService._decrypt_biometric_record(response.data)
+
+            return None
+        except Exception as e:
+            print(f"Error retrieving biometric: {str(e)}")
+            return None
 
     @staticmethod
     def get_biometrics_by_client(
         client_id: UUID,
         biometric_type: Optional[BiometricType] = None,
-        is_active: Optional[bool] = None
+        active_only: bool = True
     ) -> List[Biometric]:
-        supabase = get_supabase_client()
+        """
+        Retrieve all biometric records for a client.
 
-        query = supabase.table("client_biometrics").select("*").eq("client_id", str(client_id))
+        Args:
+            client_id: UUID of the client
+            biometric_type: Optional filter by biometric type
+            active_only: Only return active records
 
-        if biometric_type:
-            query = query.eq("type", biometric_type.value)
+        Returns:
+            List of decrypted Biometric objects
+        """
+        try:
+            supabase = get_supabase_client()
 
-        if is_active is not None:
-            query = query.eq("is_active", is_active)
+            query = supabase.table("client_biometrics").select("*").eq(
+                "client_id", str(client_id)
+            )
 
-        query = query.order("created_at", desc=True)
+            if biometric_type:
+                query = query.eq("type", biometric_type.value)
 
-        response = query.execute()
+            if active_only:
+                query = query.eq("is_active", True)
 
-        if response and response.data:
-            return [BiometricService._parse_biometric(bio) for bio in response.data]
-        return []
+            response = query.execute()
+
+            if response and response.data:
+                return [
+                    BiometricService._decrypt_biometric_record(record)
+                    for record in response.data
+                ]
+
+            return []
+        except Exception as e:
+            print(f"Error retrieving biometrics: {str(e)}")
+            return []
 
     @staticmethod
-    def update_biometric(biometric_id: UUID, biometric_update: BiometricUpdate) -> Optional[Biometric]:
-        supabase = get_supabase_client()
+    def update_biometric(
+        biometric_id: UUID,
+        update_data: BiometricUpdate
+    ) -> Optional[Biometric]:
+        """
+        Update a biometric record with encrypted data.
 
-        update_dict = {}
+        Args:
+            biometric_id: UUID of the biometric to update
+            update_data: Update data
 
-        if biometric_update.compressed_data is not None:
-            update_dict["compressed_data"] = base64.b64encode(biometric_update.compressed_data).decode('utf-8')
+        Returns:
+            Updated Biometric object or None if failed
+        """
+        try:
+            supabase = get_supabase_client()
+            encryption_service = get_encryption_service()
 
-        if biometric_update.thumbnail is not None:
-            update_dict["thumbnail"] = base64.b64encode(biometric_update.thumbnail).decode('utf-8')
+            data = {}
 
-        if biometric_update.embedding is not None:
-            update_dict["embedding"] = biometric_update.embedding
+            if update_data.compressed_data is not None:
+                data["compressed_data"] = encryption_service.encrypt_image_data(
+                    update_data.compressed_data
+                )
 
-        if biometric_update.is_active is not None:
-            update_dict["is_active"] = biometric_update.is_active
+            if update_data.thumbnail is not None:
+                data["thumbnail"] = encryption_service.encrypt_image_data(
+                    update_data.thumbnail
+                )
 
-        if biometric_update.meta_info is not None:
-            update_dict["meta_info"] = biometric_update.meta_info
+            if update_data.embedding is not None:
+                data["embedding"] = encryption_service.encrypt_embedding(
+                    update_data.embedding
+                )
 
-        if not update_dict:
-            return BiometricService.get_biometric_by_id(biometric_id)
+            if update_data.is_active is not None:
+                data["is_active"] = update_data.is_active
 
-        response = supabase.table("client_biometrics").update(update_dict).eq("id", str(biometric_id)).execute()
+            if update_data.meta_info is not None:
+                meta_info = update_data.meta_info.copy()
+                meta_info["encryption"] = "AES-256-GCM"
+                data["meta_info"] = meta_info
 
-        if response and response.data:
-            return BiometricService._parse_biometric(response.data[0])
-        return None
+            if not data:
+                return BiometricService.get_biometric(biometric_id)
+
+            response = supabase.table("client_biometrics").update(data).eq(
+                "id", str(biometric_id)
+            ).execute()
+
+            if response and response.data:
+                return BiometricService._decrypt_biometric_record(response.data[0])
+
+            return None
+        except Exception as e:
+            print(f"Error updating biometric: {str(e)}")
+            return None
 
     @staticmethod
     def delete_biometric(biometric_id: UUID) -> bool:
-        supabase = get_supabase_client()
+        """
+        Soft delete a biometric record by setting is_active to False.
 
-        response = supabase.table("client_biometrics").delete().eq("id", str(biometric_id)).execute()
+        Args:
+            biometric_id: UUID of the biometric to delete
 
-        return bool(response and response.data)
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            supabase = get_supabase_client()
 
-    @staticmethod
-    def deactivate_biometric(biometric_id: UUID) -> Optional[Biometric]:
-        supabase = get_supabase_client()
+            response = supabase.table("client_biometrics").update({
+                "is_active": False
+            }).eq("id", str(biometric_id)).execute()
 
-        response = supabase.table("client_biometrics").update({
-            "is_active": False
-        }).eq("id", str(biometric_id)).execute()
-
-        if response and response.data:
-            return BiometricService._parse_biometric(response.data[0])
-        return None
+            return bool(response and response.data)
+        except Exception as e:
+            print(f"Error deleting biometric: {str(e)}")
+            return False
 
     @staticmethod
     def search_by_embedding(
@@ -126,69 +231,132 @@ class BiometricService:
         limit: int = 10,
         similarity_threshold: float = 0.8
     ) -> List[BiometricSearchResult]:
-        supabase = get_supabase_client()
+        """
+        Search for similar biometric records by embedding.
 
-        rpc_params = {
-            "query_embedding": embedding,
-            "match_threshold": similarity_threshold,
-            "match_count": limit
-        }
+        Args:
+            embedding: Embedding vector to search for
+            biometric_type: Optional filter by biometric type
+            limit: Maximum number of results
+            similarity_threshold: Minimum similarity score (0-1)
 
-        if biometric_type:
-            rpc_params["filter_type"] = biometric_type.value
-
+        Returns:
+            List of BiometricSearchResult objects
+        """
         try:
-            response = supabase.rpc("match_biometrics", rpc_params).execute()
+            import numpy as np
+            supabase = get_supabase_client()
+            encryption_service = get_encryption_service()
 
-            if response and response.data:
-                results = []
-                for item in response.data:
-                    biometric = BiometricService._parse_biometric(item)
-                    result = BiometricSearchResult(
-                        biometric=biometric,
-                        similarity=item.get("similarity", 0.0),
-                        customer_info=item.get("customer_info")
+            query = supabase.table("client_biometrics").select(
+                "*"
+            ).eq("is_active", True)
+
+            if biometric_type:
+                query = query.eq("type", biometric_type.value)
+
+            response = query.execute()
+
+            if not response or not response.data:
+                return []
+
+            results = []
+            embedding_array = np.array(embedding)
+
+            for record in response.data:
+                if not record.get("embedding"):
+                    continue
+
+                try:
+                    stored_embedding = encryption_service.decrypt_embedding(
+                        record["embedding"]
                     )
-                    results.append(result)
-                return results
-        except Exception:
-            pass
+                    stored_array = np.array(stored_embedding)
 
-        return []
+                    distance = np.linalg.norm(embedding_array - stored_array)
+                    similarity = max(0.0, 1.0 - distance)
+
+                    if similarity >= similarity_threshold:
+                        biometric = BiometricService._decrypt_biometric_record(record)
+
+                        client_response = supabase.table("clients").select(
+                            "*"
+                        ).eq("id", record["client_id"]).maybe_single().execute()
+
+                        client_info = None
+                        if client_response and client_response.data:
+                            client_info = client_response.data
+
+                        results.append(BiometricSearchResult(
+                            biometric=biometric,
+                            similarity=similarity,
+                            client_info=client_info
+                        ))
+                except Exception as e:
+                    print(f"Error processing record: {str(e)}")
+                    continue
+
+            results.sort(key=lambda x: x.similarity, reverse=True)
+            return results[:limit]
+
+        except Exception as e:
+            print(f"Error searching by embedding: {str(e)}")
+            return []
 
     @staticmethod
-    def list_biometrics(
-        biometric_type: Optional[BiometricType] = None,
-        is_active: Optional[bool] = None,
-        limit: int = 100,
-        offset: int = 0
-    ) -> List[Biometric]:
-        supabase = get_supabase_client()
+    def _decrypt_biometric_record(record: dict) -> Biometric:
+        """
+        Decrypt a biometric record from database.
 
-        query = supabase.table("client_biometrics").select("*")
+        Args:
+            record: Raw database record
 
-        if biometric_type:
-            query = query.eq("type", biometric_type.value)
+        Returns:
+            Decrypted Biometric object
+        """
+        try:
+            encryption_service = get_encryption_service()
 
-        if is_active is not None:
-            query = query.eq("is_active", is_active)
+            meta_info = record.get("meta_info", {})
+            is_encrypted = meta_info.get("encryption") == "AES-256-GCM"
 
-        query = query.order("created_at", desc=True).range(offset, offset + limit - 1)
+            if is_encrypted:
+                compressed_data = encryption_service.decrypt_image_data(
+                    record["compressed_data"]
+                )
 
-        response = query.execute()
+                thumbnail = None
+                if record.get("thumbnail"):
+                    thumbnail = encryption_service.decrypt_image_data(
+                        record["thumbnail"]
+                    )
 
-        if response and response.data:
-            return [BiometricService._parse_biometric(bio) for bio in response.data]
-        return []
+                embedding = None
+                if record.get("embedding"):
+                    embedding = encryption_service.decrypt_embedding(
+                        record["embedding"]
+                    )
+            else:
+                compressed_data = base64.b64decode(record["compressed_data"])
 
-    @staticmethod
-    def _parse_biometric(data: dict) -> Biometric:
-        parsed_data = data.copy()
+                thumbnail = None
+                if record.get("thumbnail"):
+                    thumbnail = base64.b64decode(record["thumbnail"])
 
-        if "compressed_data" in parsed_data and parsed_data["compressed_data"]:
-            parsed_data["compressed_data"] = base64.b64decode(parsed_data["compressed_data"])
+                embedding = record.get("embedding")
 
-        if "thumbnail" in parsed_data and parsed_data["thumbnail"]:
-            parsed_data["thumbnail"] = base64.b64decode(parsed_data["thumbnail"])
-
-        return Biometric(**parsed_data)
+            return Biometric(
+                id=record["id"],
+                client_id=record["client_id"],
+                type=BiometricType(record["type"]),
+                compressed_data=compressed_data,
+                thumbnail=thumbnail,
+                embedding=embedding,
+                is_active=record["is_active"],
+                created_at=record["created_at"],
+                updated_at=record["updated_at"],
+                meta_info=meta_info
+            )
+        except Exception as e:
+            print(f"Error decrypting biometric record: {str(e)}")
+            raise
