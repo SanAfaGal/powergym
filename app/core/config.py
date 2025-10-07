@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
@@ -21,10 +21,17 @@ class Settings(BaseSettings):
     SUPABASE_URL: str
     SUPABASE_KEY: str
 
+    REDIS_URL: Optional[str] = None
+
     FACE_RECOGNITION_MODEL: str = "hog"
     FACE_RECOGNITION_TOLERANCE: float = 0.6
     MAX_IMAGE_SIZE_MB: int = 5
     ALLOWED_IMAGE_FORMATS: List[str] = ["jpg", "jpeg", "png", "webp"]
+
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_PER_MINUTE: int = 60
+
+    ENABLE_COMPRESSION: bool = True
 
     class Config:
         env_file = ".env"

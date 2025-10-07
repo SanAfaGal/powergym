@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.core.database import get_supabase_client
 from app.models.biometric import BiometricType
 from uuid import UUID
+from app.core.async_processing import run_in_threadpool
 
 class FaceRecognitionService:
 
@@ -97,6 +98,13 @@ class FaceRecognitionService:
         thumbnail = FaceRecognitionService._create_thumbnail(image_array)
 
         return embedding_512, compressed_data, thumbnail
+
+    @staticmethod
+    async def extract_face_encoding_async(image_base64: str) -> Tuple[List[float], bytes, bytes]:
+        return await run_in_threadpool(
+            FaceRecognitionService.extract_face_encoding,
+            image_base64
+        )
 
     @staticmethod
     def _expand_embedding_to_512(embedding_128: List[float]) -> List[float]:

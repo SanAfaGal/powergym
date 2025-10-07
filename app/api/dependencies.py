@@ -4,6 +4,7 @@ from fastapi.security import OAuth2PasswordBearer
 from app.core.security import decode_token
 from app.models.user import User, UserRole
 from app.services.user_service import UserService
+from app.core.token_blacklist import get_token_blacklist
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 
@@ -13,6 +14,14 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> Use
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+    blacklist = get_token_blacklist()
+    if await blacklist.is_blacklisted(token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     payload = decode_token(token)
     if not payload:

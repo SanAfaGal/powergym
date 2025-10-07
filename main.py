@@ -6,6 +6,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.v1.router import api_router
 from app.services.user_service import UserService
+from app.middleware.compression import CompressionMiddleware
+from app.middleware.logging import StructuredLoggingMiddleware
+from app.middleware.error_handler import setup_exception_handlers
+from app.middleware.rate_limit import setup_rate_limiting
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -17,6 +21,8 @@ app = FastAPI(
 async def startup_event():
     UserService.initialize_super_admin()
 
+app.add_middleware(StructuredLoggingMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
@@ -24,6 +30,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+if settings.ENABLE_COMPRESSION:
+    app.add_middleware(CompressionMiddleware, minimum_size=1000)
+
+setup_exception_handlers(app)
+setup_rate_limiting(app)
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
