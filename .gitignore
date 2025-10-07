@@ -1,2 +1,88 @@
-node_modules
-.env
+# =======================================
+# 🚀 FASTAPI + PYTHON PROJECT .gitignore
+# =======================================
+
+# ─── Entornos virtuales ────────────────
+venv/
+.env/
+.envrc
+*.env
+
+# ─── Archivos de sistema ───────────────
+.DS_Store
+Thumbs.db
+
+# ─── Compilaciones / cachés ────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+
+# ─── Logs y datos temporales ───────────
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+tmp/
+.cache/
+.cache/*
+logs/
+logs/*
+
+# ─── Configuración de IDEs ─────────────
+.vscode/
+.idea/
+*.code-workspace
+
+# ─── Tests ─────────────────────────────
+.coverage
+htmlcov/
+pytest_cache/
+.tox/
+
+# ─── Archivos de ejecución ─────────────
+*.pid
+*.seed
+*.sqlite3
+*.db
+*.sqlite
+
+# ─── Archivos de despliegue ────────────
+# Ignora los binarios de uvicorn o gunicorn, si los generas
+*.spec
+
+# ─── Archivos sensibles ────────────────
+# (Nunca subas claves, tokens o certificados reales)
+*.pem
+*.key
+*.crt
+secrets.json
+secret_*.json
+
+# ─── Frontend o assets (si los generas con build) ─────────
+node_modules/
+*.lock
+*.map
+
+# ─── Supabase ──────────────────────────
+# Si usas CLI local o configuraciones específicas
+.supabase/
+.supabase/config.toml
+.supabase/.env
+
+# ─── Redis / cache local ───────────────
+*.rdb
+dump.rdb
+
+# ─── Archivos personalizados ───────────
+# Si usas embeddings o biometría, excluye los datos
+embeddings/
+biometric_data/
+
+# No ignores esto:
+!supabase/migrations/
+!alembic/
