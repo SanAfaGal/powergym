@@ -21,7 +21,12 @@ class Settings(BaseSettings):
     SUPABASE_URL: str
     SUPABASE_KEY: str
 
+    DATABASE_URL: str
+    ASYNC_DATABASE_URL: str
+
     REDIS_URL: Optional[str] = None
+
+    DEBUG: bool = False
 
     FACE_RECOGNITION_MODEL: str = "hog"
     FACE_RECOGNITION_TOLERANCE: float = 0.6

@@ -1,6 +1,9 @@
 from supabase import create_client, Client
+from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
-from typing import Generator
+from app.db.session import get_db, get_async_db
+from typing import Generator, AsyncGenerator
 import asyncio
 from functools import lru_cache
 
@@ -43,3 +46,16 @@ def get_supabase_client() -> Client:
 async def get_supabase_client_async() -> Client:
     pool = get_connection_pool()
     return await pool.get_client()
+
+def get_db_session() -> Generator[Session, None, None]:
+    """
+    Get SQLAlchemy database session for synchronous operations.
+    """
+    return get_db()
+
+async def get_async_db_session() -> AsyncGenerator[AsyncSession, None]:
+    """
+    Get SQLAlchemy database session for asynchronous operations.
+    """
+    async for session in get_async_db():
+        yield session
