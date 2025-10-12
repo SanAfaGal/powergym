@@ -51,12 +51,13 @@ class EncryptionService:
         )
         return kdf.derive(self._key)
 
-    def encrypt_embedding(self, embedding: List[float]) -> str:
+    def encrypt_embedding(self, embedding: Union[List[float], bytes]) -> str:
         """
         Encrypt a face embedding vector.
+        Accepts either raw embedding list or pre-compressed bytes.
 
         Args:
-            embedding: List of float values representing the embedding
+            embedding: List of float values or compressed bytes
 
         Returns:
             Base64-encoded encrypted data with format: salt:nonce:ciphertext:tag
@@ -64,8 +65,11 @@ class EncryptionService:
         if not embedding:
             raise ValueError("Embedding cannot be empty")
 
-        embedding_json = json.dumps(embedding)
-        embedding_bytes = embedding_json.encode('utf-8')
+        if isinstance(embedding, list):
+            embedding_json = json.dumps(embedding)
+            embedding_bytes = embedding_json.encode('utf-8')
+        else:
+            embedding_bytes = embedding
 
         salt = os.urandom(16)
         derived_key = self._derive_key(salt)
@@ -78,15 +82,16 @@ class EncryptionService:
         encrypted_data = salt + nonce + ciphertext
         return base64.b64encode(encrypted_data).decode('utf-8')
 
-    def decrypt_embedding(self, encrypted_data: str) -> List[float]:
+    def decrypt_embedding(self, encrypted_data: str, is_compressed: bool = False) -> Union[List[float], bytes]:
         """
         Decrypt an encrypted embedding vector.
 
         Args:
             encrypted_data: Base64-encoded encrypted embedding
+            is_compressed: If True, returns compressed bytes instead of parsing
 
         Returns:
-            Original embedding as list of floats
+            Original embedding as list of floats or compressed bytes
         """
         if not encrypted_data:
             raise ValueError("Encrypted data cannot be empty")
@@ -102,6 +107,9 @@ class EncryptionService:
 
             aesgcm = AESGCM(derived_key)
             plaintext = aesgcm.decrypt(nonce, ciphertext, None)
+
+            if is_compressed:
+                return plaintext
 
             embedding_json = plaintext.decode('utf-8')
             embedding = json.loads(embedding_json)

@@ -11,6 +11,7 @@ from app.repositories.biometric_repository import BiometricRepository
 from app.repositories.client_repository import ClientRepository
 from app.db.models import BiometricTypeEnum
 from app.core.encryption import get_encryption_service
+from app.core.compression import CompressionService
 from app.models.biometric import BiometricType
 from app.core.config import settings
 
@@ -24,19 +25,22 @@ class FaceDatabase:
         client_id: UUID,
         embedding: List[float],
         compressed_data: bytes,
-        thumbnail: bytes
+        thumbnail: bytes,
+        original_image_bytes: bytes = None
     ) -> dict:
         """
-        Store face biometric data in database with encryption.
+        Store face biometric data in database with compression and encryption.
+        Pipeline: Compress -> Encrypt -> Store
 
         Args:
             client_id: UUID of the client
             embedding: 512-dimensional face embedding
             compressed_data: Compressed face image bytes
             thumbnail: Thumbnail image bytes
+            original_image_bytes: Original image bytes for compression stats (optional)
 
         Returns:
-            Dictionary with success status and biometric_id or error
+            Dictionary with success status, biometric_id, and compression stats
 
         Raises:
             Exception: If database operation fails
@@ -50,19 +54,38 @@ class FaceDatabase:
                 if biometric.type == BiometricTypeEnum.FACE:
                     BiometricRepository.update(db, biometric.id, is_active=False)
 
+            compression_service = CompressionService()
             encryption_service = get_encryption_service()
 
-            encrypted_embedding = encryption_service.encrypt_embedding(embedding)
+            compressed_embedding = compression_service.compress_embedding(embedding)
+            encrypted_embedding = encryption_service.encrypt_embedding(compressed_embedding)
+
             encrypted_compressed_data = encryption_service.encrypt_image_data(
                 compressed_data
             )
             encrypted_thumbnail = encryption_service.encrypt_image_data(thumbnail)
 
+            compression_stats = None
+            if original_image_bytes:
+                compression_stats = compression_service.get_compression_stats(
+                    original_embedding=embedding,
+                    compressed_embedding=compressed_embedding,
+                    original_image=original_image_bytes,
+                    compressed_image=compressed_data,
+                    thumbnail=thumbnail
+                )
+
             meta_info = {
-                "encoding_version": "face_recognition_v1_encrypted",
+                "encoding_version": "face_recognition_v2_compressed_encrypted",
                 "model": settings.FACE_RECOGNITION_MODEL,
-                "encryption": "AES-256-GCM"
+                "compression": "zlib_level_9",
+                "encryption": "AES-256-GCM",
+                "image_quality": settings.IMAGE_COMPRESSION_QUALITY,
+                "thumbnail_quality": settings.THUMBNAIL_COMPRESSION_QUALITY
             }
+
+            if compression_stats:
+                meta_info["compression_stats"] = compression_stats
 
             biometric = BiometricRepository.create(
                 db=db,
@@ -77,7 +100,8 @@ class FaceDatabase:
             return {
                 "success": True,
                 "biometric_id": str(biometric.id),
-                "client_id": str(client_id)
+                "client_id": str(client_id),
+                "compression_stats": compression_stats
             }
 
         except Exception as e:

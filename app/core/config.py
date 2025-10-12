@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     MAX_IMAGE_SIZE_MB: int = 5
     ALLOWED_IMAGE_FORMATS: List[str] = ["jpg", "jpeg", "png", "webp"]
 
+    IMAGE_COMPRESSION_QUALITY: int = 85
+    THUMBNAIL_COMPRESSION_QUALITY: int = 70
+    THUMBNAIL_WIDTH: int = 150
+    THUMBNAIL_HEIGHT: int = 150
+    EMBEDDING_COMPRESSION_LEVEL: int = 9
+
     BIOMETRIC_ENCRYPTION_KEY: str
 
     RATE_LIMIT_ENABLED: bool = True

@@ -10,6 +10,7 @@ import numpy as np
 from PIL import Image
 
 from app.core.config import settings
+from app.core.compression import CompressionService
 
 
 class ImageProcessor:
@@ -75,7 +76,7 @@ class ImageProcessor:
     @staticmethod
     def create_thumbnail(
         image_array: np.ndarray,
-        size: Tuple[int, int] = (150, 150)
+        size: Tuple[int, int] = None
     ) -> bytes:
         """
         Create a thumbnail from an image array.
@@ -90,18 +91,10 @@ class ImageProcessor:
         Raises:
             ValueError: If thumbnail creation fails
         """
-        try:
-            image_pil = Image.fromarray(image_array)
-            image_pil.thumbnail(size, Image.Resampling.LANCZOS)
-
-            buffer = io.BytesIO()
-            image_pil.save(buffer, format='JPEG', quality=85)
-            return buffer.getvalue()
-        except Exception as e:
-            raise ValueError(f"Failed to create thumbnail: {str(e)}")
+        return CompressionService.compress_thumbnail(image_array, size=size)
 
     @staticmethod
-    def compress_image(image_array: np.ndarray, quality: int = 85) -> bytes:
+    def compress_image(image_array: np.ndarray, quality: int = None) -> bytes:
         """
         Compress an image array to JPEG format.
 
@@ -115,10 +108,4 @@ class ImageProcessor:
         Raises:
             ValueError: If compression fails
         """
-        try:
-            image_pil = Image.fromarray(image_array)
-            buffer = io.BytesIO()
-            image_pil.save(buffer, format='JPEG', quality=quality)
-            return buffer.getvalue()
-        except Exception as e:
-            raise ValueError(f"Failed to compress image: {str(e)}")
+        return CompressionService.compress_image(image_array, quality=quality)
