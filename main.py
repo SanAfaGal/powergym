@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.v1.router import api_router
 from app.services.user_service import UserService
+from app.db.session import SessionLocal
 from app.middleware.compression import CompressionMiddleware
 from app.middleware.logging import StructuredLoggingMiddleware
 from app.middleware.error_handler import setup_exception_handlers
@@ -19,7 +20,11 @@ app = FastAPI(
 
 @app.on_event("startup")
 async def startup_event():
-    UserService.initialize_super_admin()
+    db = SessionLocal()
+    try:
+        UserService.initialize_super_admin(db)
+    finally:
+        db.close()
 
 app.add_middleware(StructuredLoggingMiddleware)
 

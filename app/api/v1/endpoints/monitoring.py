@@ -1,5 +1,7 @@
-from fastapi import APIRouter, HTTPException
-from app.core.database import get_supabase_client
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
+from app.db.session import get_async_db
 from app.core.config import settings
 from app.core.cache import get_cache_manager
 import time
@@ -7,7 +9,7 @@ import time
 router = APIRouter()
 
 @router.get("/health")
-async def health_check():
+async def health_check(db: AsyncSession = Depends(get_async_db)):
     health_status = {
         "status": "healthy",
         "version": settings.VERSION,
@@ -15,8 +17,7 @@ async def health_check():
     }
 
     try:
-        supabase = get_supabase_client()
-        response = supabase.table("users").select("id").limit(1).execute()
+        await db.execute(text("SELECT 1"))
         health_status["database"] = "connected"
     except Exception as e:
         health_status["database"] = f"error: {str(e)}"
@@ -43,10 +44,9 @@ async def get_metrics():
     }
 
 @router.get("/ready")
-async def readiness_check():
+async def readiness_check(db: AsyncSession = Depends(get_async_db)):
     try:
-        supabase = get_supabase_client()
-        response = supabase.table("users").select("id").limit(1).execute()
+        await db.execute(text("SELECT 1"))
         return {"ready": True}
     except Exception as e:
         raise HTTPException(status_code=503, detail="Service not ready")

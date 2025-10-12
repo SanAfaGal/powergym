@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy.orm import Session
 from app.models.client import Client, ClientCreate, ClientUpdate
 from app.services.client_service import ClientService
 from app.api.dependencies import get_current_active_user
 from app.models.user import User
+from app.db.session import get_db
 from uuid import UUID
 from typing import List
 
@@ -40,16 +42,17 @@ router = APIRouter()
 )
 def create_client(
     client_data: ClientCreate,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
 ):
-    existing_client = ClientService.get_client_by_dni(client_data.dni_number)
+    existing_client = ClientService.get_client_by_dni(db, client_data.dni_number)
     if existing_client:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Ya existe un cliente con este número de documento"
         )
 
-    client = ClientService.create_client(client_data)
+    client = ClientService.create_client(db, client_data)
     if not client:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -92,9 +95,11 @@ def list_clients(
     is_active: bool | None = None,
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
 ):
     clients = ClientService.list_clients(
+        db=db,
         is_active=is_active,
         limit=limit,
         offset=offset
@@ -134,9 +139,10 @@ def list_clients(
 def search_clients(
     q: str = Query(..., min_length=1, description="Search term"),
     limit: int = Query(50, ge=1, le=100),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
 ):
-    clients = ClientService.search_clients(search_term=q, limit=limit)
+    clients = ClientService.search_clients(db=db, search_term=q, limit=limit)
     return clients
 
 @router.get(
@@ -170,9 +176,10 @@ def search_clients(
 )
 def get_client_by_dni(
     dni_number: str,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
 ):
-    client = ClientService.get_client_by_dni(dni_number)
+    client = ClientService.get_client_by_dni(db, dni_number)
     if not client:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -183,9 +190,10 @@ def get_client_by_dni(
 @router.get("/{client_id}", response_model=Client)
 def get_client(
     client_id: UUID,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
 ):
-    client = ClientService.get_client_by_id(client_id)
+    client = ClientService.get_client_by_id(db, client_id)
     if not client:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -197,9 +205,10 @@ def get_client(
 def update_client(
     client_id: UUID,
     client_update: ClientUpdate,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
 ):
-    existing_client = ClientService.get_client_by_id(client_id)
+    existing_client = ClientService.get_client_by_id(db, client_id)
     if not existing_client:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -207,14 +216,14 @@ def update_client(
         )
 
     if client_update.dni_number and client_update.dni_number != existing_client.dni_number:
-        duplicate_client = ClientService.get_client_by_dni(client_update.dni_number)
+        duplicate_client = ClientService.get_client_by_dni(db, client_update.dni_number)
         if duplicate_client:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Ya existe otro cliente con este número de documento"
             )
 
-    updated_client = ClientService.update_client(client_id, client_update)
+    updated_client = ClientService.update_client(db, client_id, client_update)
     if not updated_client:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -226,16 +235,17 @@ def update_client(
 @router.delete("/{client_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_client(
     client_id: UUID,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
 ):
-    existing_client = ClientService.get_client_by_id(client_id)
+    existing_client = ClientService.get_client_by_id(db, client_id)
     if not existing_client:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Cliente no encontrado"
         )
 
-    success = ClientService.delete_client(client_id)
+    success = ClientService.delete_client(db, client_id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

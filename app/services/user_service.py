@@ -1,67 +1,81 @@
+from sqlalchemy.orm import Session
 from app.models.user import User, UserCreate, UserInDB, UserUpdate, UserRole
 from app.core.security import get_password_hash, verify_password
 from app.core.config import settings
-from app.core.database import get_supabase_client
+from app.repositories.user_repository import UserRepository
+from app.db.models import UserModel, UserRoleEnum
 
 class UserService:
     @staticmethod
-    def initialize_super_admin():
-        supabase = get_supabase_client()
+    def initialize_super_admin(db: Session):
+        existing_user = UserRepository.get_by_username(db, settings.SUPER_ADMIN_USERNAME)
 
-        existing_user = supabase.table("users").select("*").eq("username", settings.SUPER_ADMIN_USERNAME).maybe_single().execute()
-
-        if not existing_user or not existing_user.data:
+        if not existing_user:
             hashed_password = get_password_hash(settings.SUPER_ADMIN_PASSWORD)
-            user_data = {
-                "username": settings.SUPER_ADMIN_USERNAME,
-                "full_name": settings.SUPER_ADMIN_FULL_NAME,
-                "email": settings.SUPER_ADMIN_EMAIL,
-                "role": "admin",
-                "hashed_password": hashed_password,
-                "disabled": False,
-            }
-            supabase.table("users").insert(user_data).execute()
+            UserRepository.create(
+                db=db,
+                username=settings.SUPER_ADMIN_USERNAME,
+                email=settings.SUPER_ADMIN_EMAIL,
+                full_name=settings.SUPER_ADMIN_FULL_NAME,
+                hashed_password=hashed_password,
+                role=UserRoleEnum.ADMIN,
+                disabled=False
+            )
 
     @staticmethod
-    def get_user_by_username(username: str) -> UserInDB | None:
-        supabase = get_supabase_client()
-        response = supabase.table("users").select("*").eq("username", username).maybe_single().execute()
-        if response and response.data:
-            return UserInDB(**response.data)
+    def get_user_by_username(db: Session, username: str) -> UserInDB | None:
+        user_model = UserRepository.get_by_username(db, username)
+        if user_model:
+            return UserInDB(
+                username=user_model.username,
+                email=user_model.email,
+                full_name=user_model.full_name,
+                role=UserRole(user_model.role.value),
+                disabled=user_model.disabled,
+                hashed_password=user_model.hashed_password
+            )
         return None
 
     @staticmethod
-    def get_user_by_email(email: str) -> UserInDB | None:
-        supabase = get_supabase_client()
-        response = supabase.table("users").select("*").eq("email", email).maybe_single().execute()
-        if response and response.data:
-            return UserInDB(**response.data)
+    def get_user_by_email(db: Session, email: str) -> UserInDB | None:
+        user_model = UserRepository.get_by_email(db, email)
+        if user_model:
+            return UserInDB(
+                username=user_model.username,
+                email=user_model.email,
+                full_name=user_model.full_name,
+                role=UserRole(user_model.role.value),
+                disabled=user_model.disabled,
+                hashed_password=user_model.hashed_password
+            )
         return None
 
     @staticmethod
-    def create_user(user_data: UserCreate) -> User:
-        supabase = get_supabase_client()
+    def create_user(db: Session, user_data: UserCreate) -> User:
         hashed_password = get_password_hash(user_data.password)
 
-        user_dict = {
-            "username": user_data.username,
-            "email": user_data.email,
-            "full_name": user_data.full_name,
-            "role": user_data.role,
-            "hashed_password": hashed_password,
-            "disabled": False
-        }
+        role_enum = UserRoleEnum.ADMIN if user_data.role == UserRole.ADMIN else UserRoleEnum.EMPLOYEE
 
-        response = supabase.table("users").insert(user_dict).execute()
+        user_model = UserRepository.create(
+            db=db,
+            username=user_data.username,
+            email=user_data.email,
+            full_name=user_data.full_name,
+            hashed_password=hashed_password,
+            role=role_enum,
+            disabled=False
+        )
 
-        if response and response.data:
-            return User(**{k: v for k, v in response.data[0].items() if k != "hashed_password"})
-        return None
+        return User(
+            username=user_model.username,
+            email=user_model.email,
+            full_name=user_model.full_name,
+            role=UserRole(user_model.role.value),
+            disabled=user_model.disabled
+        )
 
     @staticmethod
-    def update_user(username: str, user_update: UserUpdate) -> User | None:
-        supabase = get_supabase_client()
-
+    def update_user(db: Session, username: str, user_update: UserUpdate) -> User | None:
         update_dict = {}
         if user_update.email is not None:
             update_dict["email"] = user_update.email
@@ -69,65 +83,87 @@ class UserService:
             update_dict["full_name"] = user_update.full_name
 
         if not update_dict:
-            return UserService.get_user_by_username(username)
+            return UserService.get_user_by_username(db, username)
 
-        response = supabase.table("users").update(update_dict).eq("username", username).execute()
+        user_model = UserRepository.update(db, username, **update_dict)
 
-        if response and response.data:
-            return User(**{k: v for k, v in response.data[0].items() if k != "hashed_password"})
+        if user_model:
+            return User(
+                username=user_model.username,
+                email=user_model.email,
+                full_name=user_model.full_name,
+                role=UserRole(user_model.role.value),
+                disabled=user_model.disabled
+            )
         return None
 
     @staticmethod
-    def change_password(username: str, new_password: str) -> bool:
-        supabase = get_supabase_client()
+    def change_password(db: Session, username: str, new_password: str) -> bool:
         hashed_password = get_password_hash(new_password)
-        response = supabase.table("users").update({"hashed_password": hashed_password}).eq("username", username).execute()
-        return bool(response and response.data)
+        user_model = UserRepository.update(db, username, hashed_password=hashed_password)
+        return user_model is not None
 
     @staticmethod
-    def disable_user(username: str) -> User | None:
-        supabase = get_supabase_client()
-        response = supabase.table("users").update({"disabled": True}).eq("username", username).execute()
-        if response and response.data:
-            return User(**{k: v for k, v in response.data[0].items() if k != "hashed_password"})
+    def disable_user(db: Session, username: str) -> User | None:
+        user_model = UserRepository.update(db, username, disabled=True)
+        if user_model:
+            return User(
+                username=user_model.username,
+                email=user_model.email,
+                full_name=user_model.full_name,
+                role=UserRole(user_model.role.value),
+                disabled=user_model.disabled
+            )
         return None
 
     @staticmethod
-    def enable_user(username: str) -> User | None:
-        supabase = get_supabase_client()
-        response = supabase.table("users").update({"disabled": False}).eq("username", username).execute()
-        if response and response.data:
-            return User(**{k: v for k, v in response.data[0].items() if k != "hashed_password"})
+    def enable_user(db: Session, username: str) -> User | None:
+        user_model = UserRepository.update(db, username, disabled=False)
+        if user_model:
+            return User(
+                username=user_model.username,
+                email=user_model.email,
+                full_name=user_model.full_name,
+                role=UserRole(user_model.role.value),
+                disabled=user_model.disabled
+            )
         return None
 
     @staticmethod
-    def change_user_role(username: str, new_role: UserRole) -> User | None:
-        supabase = get_supabase_client()
-        response = supabase.table("users").update({"role": new_role}).eq("username", username).execute()
-        if response and response.data:
-            return User(**{k: v for k, v in response.data[0].items() if k != "hashed_password"})
+    def change_user_role(db: Session, username: str, new_role: UserRole) -> User | None:
+        role_enum = UserRoleEnum.ADMIN if new_role == UserRole.ADMIN else UserRoleEnum.EMPLOYEE
+        user_model = UserRepository.update(db, username, role=role_enum)
+        if user_model:
+            return User(
+                username=user_model.username,
+                email=user_model.email,
+                full_name=user_model.full_name,
+                role=UserRole(user_model.role.value),
+                disabled=user_model.disabled
+            )
         return None
 
     @staticmethod
-    def delete_user(username: str) -> bool:
-        supabase = get_supabase_client()
-        response = supabase.table("users").delete().eq("username", username).execute()
-        return bool(response and response.data)
+    def delete_user(db: Session, username: str) -> bool:
+        return UserRepository.delete(db, username)
 
     @staticmethod
-    def get_all_users() -> list[User]:
-        supabase = get_supabase_client()
-        response = supabase.table("users").select("*").execute()
-        if response and response.data:
-            return [
-                User(**{k: v for k, v in user_dict.items() if k != "hashed_password"})
-                for user_dict in response.data
-            ]
-        return []
+    def get_all_users(db: Session) -> list[User]:
+        user_models = UserRepository.get_all(db)
+        return [
+            User(
+                username=user.username,
+                email=user.email,
+                full_name=user.full_name,
+                role=UserRole(user.role.value),
+                disabled=user.disabled
+            )
+            for user in user_models
+        ]
 
     @staticmethod
-    def authenticate_user(username: str, password: str) -> UserInDB | None:
-        user = UserService.get_user_by_username(username)
+    def authenticate_user(db: Session, username: str, password: str) -> UserInDB | None:
+        user = UserService.get_user_by_username(db, username)
         if not user:
             return None
         if not verify_password(password, user.hashed_password):

@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     ASYNC_DATABASE_URL: str
 
+    POSTGRES_USER: Optional[str] = None
+    POSTGRES_PASSWORD: Optional[str] = None
+    POSTGRES_DB: Optional[str] = None
+    POSTGRES_HOST: Optional[str] = None
+    POSTGRES_PORT: Optional[str] = None
+    ADMINER_PORT: Optional[str] = None
+
     REDIS_URL: Optional[str] = None
 
     DEBUG: bool = False
@@ -43,6 +50,5 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
-        extra = "ignore"
 
 settings = Settings()

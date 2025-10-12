@@ -5,8 +5,11 @@ Handles CRUD operations for face biometrics with encryption.
 
 from typing import List, Optional
 from uuid import UUID
+from sqlalchemy.orm import Session
 
-from app.core.database import get_supabase_client
+from app.repositories.biometric_repository import BiometricRepository
+from app.repositories.client_repository import ClientRepository
+from app.db.models import BiometricTypeEnum
 from app.core.encryption import get_encryption_service
 from app.models.biometric import BiometricType
 from app.core.config import settings
@@ -17,6 +20,7 @@ class FaceDatabase:
 
     @staticmethod
     def store_face_biometric(
+        db: Session,
         client_id: UUID,
         embedding: List[float],
         compressed_data: bytes,
@@ -38,22 +42,13 @@ class FaceDatabase:
             Exception: If database operation fails
         """
         try:
-            supabase = get_supabase_client()
-
-            existing_response = (
-                supabase.table("client_biometrics")
-                .select("id")
-                .eq("client_id", str(client_id))
-                .eq("type", BiometricType.FACE.value)
-                .eq("is_active", True)
-                .maybe_single()
-                .execute()
+            existing_biometrics = BiometricRepository.get_by_client_id(
+                db, client_id, is_active=True
             )
 
-            if existing_response and existing_response.data:
-                supabase.table("client_biometrics").update({
-                    "is_active": False
-                }).eq("id", existing_response.data["id"]).execute()
+            for biometric in existing_biometrics:
+                if biometric.type == BiometricTypeEnum.FACE:
+                    BiometricRepository.update(db, biometric.id, is_active=False)
 
             encryption_service = get_encryption_service()
 
@@ -63,30 +58,27 @@ class FaceDatabase:
             )
             encrypted_thumbnail = encryption_service.encrypt_image_data(thumbnail)
 
-            biometric_data = {
-                "client_id": str(client_id),
-                "type": BiometricType.FACE.value,
-                "compressed_data": encrypted_compressed_data,
-                "thumbnail": encrypted_thumbnail,
-                "embedding": encrypted_embedding,
-                "is_active": True,
-                "meta_info": {
-                    "encoding_version": "face_recognition_v1_encrypted",
-                    "model": settings.FACE_RECOGNITION_MODEL,
-                    "encryption": "AES-256-GCM"
-                }
+            meta_info = {
+                "encoding_version": "face_recognition_v1_encrypted",
+                "model": settings.FACE_RECOGNITION_MODEL,
+                "encryption": "AES-256-GCM"
             }
 
-            response = supabase.table("client_biometrics").insert(biometric_data).execute()
+            biometric = BiometricRepository.create(
+                db=db,
+                client_id=client_id,
+                biometric_type=BiometricTypeEnum.FACE,
+                compressed_data=encrypted_compressed_data,
+                thumbnail=encrypted_thumbnail,
+                embedding=encrypted_embedding,
+                meta_info=meta_info
+            )
 
-            if response and response.data:
-                return {
-                    "success": True,
-                    "biometric_id": response.data[0]["id"],
-                    "client_id": str(client_id)
-                }
-
-            raise Exception("Failed to store biometric data")
+            return {
+                "success": True,
+                "biometric_id": str(biometric.id),
+                "client_id": str(client_id)
+            }
 
         except Exception as e:
             return {
@@ -95,7 +87,7 @@ class FaceDatabase:
             }
 
     @staticmethod
-    def get_all_active_face_biometrics() -> List[dict]:
+    def get_all_active_face_biometrics(db: Session) -> List[dict]:
         """
         Retrieve all active face biometric records from database.
 
@@ -106,26 +98,25 @@ class FaceDatabase:
             Exception: If database query fails
         """
         try:
-            supabase = get_supabase_client()
-
-            response = (
-                supabase.table("client_biometrics")
-                .select("id, client_id, embedding, meta_info")
-                .eq("type", BiometricType.FACE.value)
-                .eq("is_active", True)
-                .execute()
+            biometrics = BiometricRepository.get_by_type(
+                db, BiometricTypeEnum.FACE, is_active=True
             )
 
-            if response and response.data:
-                return response.data
-
-            return []
+            return [
+                {
+                    "id": str(bio.id),
+                    "client_id": str(bio.client_id),
+                    "embedding": bio.embedding,
+                    "meta_info": bio.meta_info
+                }
+                for bio in biometrics
+            ]
 
         except Exception as e:
             raise Exception(f"Failed to retrieve biometric data: {str(e)}")
 
     @staticmethod
-    def get_client_info(client_id: str) -> Optional[dict]:
+    def get_client_info(db: Session, client_id: str) -> Optional[dict]:
         """
         Retrieve client information by ID.
 
@@ -139,19 +130,30 @@ class FaceDatabase:
             Exception: If database query fails
         """
         try:
-            supabase = get_supabase_client()
+            from uuid import UUID as UUID_Parser
+            client_uuid = UUID_Parser(client_id)
 
-            response = (
-                supabase.table("clients")
-                .select("*")
-                .eq("id", client_id)
-                .eq("is_active", True)
-                .maybe_single()
-                .execute()
-            )
+            client = ClientRepository.get_by_id(db, client_uuid)
 
-            if response and response.data:
-                return response.data
+            if client and client.is_active:
+                return {
+                    "id": str(client.id),
+                    "dni_type": client.dni_type.value,
+                    "dni_number": client.dni_number,
+                    "first_name": client.first_name,
+                    "middle_name": client.middle_name,
+                    "last_name": client.last_name,
+                    "second_last_name": client.second_last_name,
+                    "phone": client.phone,
+                    "alternative_phone": client.alternative_phone,
+                    "birth_date": client.birth_date.isoformat(),
+                    "gender": client.gender.value,
+                    "address": client.address,
+                    "is_active": client.is_active,
+                    "created_at": client.created_at.isoformat(),
+                    "updated_at": client.updated_at.isoformat(),
+                    "meta_info": client.meta_info
+                }
 
             return None
 
@@ -159,7 +161,7 @@ class FaceDatabase:
             raise Exception(f"Failed to retrieve client info: {str(e)}")
 
     @staticmethod
-    def deactivate_face_biometric(client_id: UUID) -> dict:
+    def deactivate_face_biometric(db: Session, client_id: UUID) -> dict:
         """
         Deactivate all face biometric records for a client.
 
@@ -173,17 +175,17 @@ class FaceDatabase:
             Exception: If database operation fails
         """
         try:
-            supabase = get_supabase_client()
-
-            response = (
-                supabase.table("client_biometrics")
-                .update({"is_active": False})
-                .eq("client_id", str(client_id))
-                .eq("type", BiometricType.FACE.value)
-                .execute()
+            biometrics = BiometricRepository.get_by_client_id(
+                db, client_id, is_active=True
             )
 
-            if response:
+            deactivated_count = 0
+            for biometric in biometrics:
+                if biometric.type == BiometricTypeEnum.FACE:
+                    BiometricRepository.update(db, biometric.id, is_active=False)
+                    deactivated_count += 1
+
+            if deactivated_count > 0:
                 return {
                     "success": True,
                     "message": "Face biometric deactivated successfully"
@@ -191,7 +193,7 @@ class FaceDatabase:
 
             return {
                 "success": False,
-                "error": "Failed to deactivate face biometric"
+                "error": "No active face biometric found"
             }
 
         except Exception as e:

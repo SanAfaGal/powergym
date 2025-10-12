@@ -5,6 +5,7 @@ Provides high-level API for face registration, authentication, and comparison.
 
 from typing import Optional, Tuple, List
 from uuid import UUID
+from sqlalchemy.orm import Session
 
 from app.core.encryption import get_encryption_service
 from .image_processor import ImageProcessor
@@ -83,11 +84,12 @@ class FaceRecognitionService:
         )
 
     @staticmethod
-    def register_face(client_id: UUID, image_base64: str) -> dict:
+    def register_face(db: Session, client_id: UUID, image_base64: str) -> dict:
         """
         Register a face biometric for a client.
 
         Args:
+            db: Database session
             client_id: UUID of the client
             image_base64: Base64 encoded face image
 
@@ -100,6 +102,7 @@ class FaceRecognitionService:
             )
 
             result = FaceDatabase.store_face_biometric(
+                db=db,
                 client_id=client_id,
                 embedding=embedding,
                 compressed_data=compressed_data,
@@ -121,6 +124,7 @@ class FaceRecognitionService:
 
     @staticmethod
     def authenticate_face(
+        db: Session,
         image_base64: str,
         tolerance: Optional[float] = None
     ) -> dict:
@@ -128,6 +132,7 @@ class FaceRecognitionService:
         Authenticate a client by face image.
 
         Args:
+            db: Database session
             image_base64: Base64 encoded face image
             tolerance: Optional similarity threshold
 
@@ -137,7 +142,7 @@ class FaceRecognitionService:
         try:
             embedding, _, _ = FaceRecognitionService.extract_face_encoding(image_base64)
 
-            biometric_records = FaceDatabase.get_all_active_face_biometrics()
+            biometric_records = FaceDatabase.get_all_active_face_biometrics(db)
 
             if not biometric_records:
                 return {
@@ -179,7 +184,7 @@ class FaceRecognitionService:
                     best_match = biometric
 
             if best_match:
-                client_info = FaceDatabase.get_client_info(best_match["client_id"])
+                client_info = FaceDatabase.get_client_info(db, best_match["client_id"])
 
                 if client_info:
                     confidence = max(0.0, 1.0 - best_distance)
@@ -209,32 +214,34 @@ class FaceRecognitionService:
             }
 
     @staticmethod
-    def update_face(client_id: UUID, image_base64: str) -> dict:
+    def update_face(db: Session, client_id: UUID, image_base64: str) -> dict:
         """
         Update face biometric for a client.
 
         Args:
+            db: Database session
             client_id: UUID of the client
             image_base64: Base64 encoded face image
 
         Returns:
             Dictionary with success status and biometric info
         """
-        return FaceRecognitionService.register_face(client_id, image_base64)
+        return FaceRecognitionService.register_face(db, client_id, image_base64)
 
     @staticmethod
-    def delete_face(client_id: UUID) -> dict:
+    def delete_face(db: Session, client_id: UUID) -> dict:
         """
         Delete (deactivate) face biometric for a client.
 
         Args:
+            db: Database session
             client_id: UUID of the client
 
         Returns:
             Dictionary with success status
         """
         try:
-            return FaceDatabase.deactivate_face_biometric(client_id)
+            return FaceDatabase.deactivate_face_biometric(db, client_id)
         except Exception as e:
             return {
                 "success": False,

@@ -2,7 +2,9 @@ from datetime import timedelta
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
 from app.core.config import settings
+from app.db.session import get_db
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -41,9 +43,10 @@ router = APIRouter()
         403: {"description": "Only administrators can register new users"}
     }
 )
-async def register(
+def register(
     user_data: UserCreate,
-    current_user: Annotated[UserInDB, Depends(get_current_user)]
+    current_user: Annotated[UserInDB, Depends(get_current_user)],
+    db: Session = Depends(get_db)
 ):
     if current_user.role != "admin":
         raise HTTPException(
@@ -51,21 +54,21 @@ async def register(
             detail="Only administrators can register new users"
         )
 
-    existing_user = UserService.get_user_by_username(user_data.username)
+    existing_user = UserService.get_user_by_username(db, user_data.username)
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Username already exists"
         )
 
-    existing_email = UserService.get_user_by_email(user_data.email)
+    existing_email = UserService.get_user_by_email(db, user_data.email)
     if existing_email:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
         )
 
-    new_user = UserService.create_user(user_data)
+    new_user = UserService.create_user(db, user_data)
     return new_user
 
 @router.post(
@@ -90,10 +93,11 @@ async def register(
         400: {"description": "Inactive user"}
     }
 )
-async def login(
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
+def login(
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    db: Session = Depends(get_db)
 ):
-    user = UserService.authenticate_user(form_data.username, form_data.password)
+    user = UserService.authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -145,7 +149,10 @@ async def login(
         401: {"description": "Invalid or expired refresh token"}
     }
 )
-async def refresh_token(refresh_request: RefreshTokenRequest):
+def refresh_token(
+    refresh_request: RefreshTokenRequest,
+    db: Session = Depends(get_db)
+):
     payload = decode_token(refresh_request.refresh_token)
 
     if not payload or payload.get("type") != "refresh":
@@ -161,7 +168,7 @@ async def refresh_token(refresh_request: RefreshTokenRequest):
             detail="Invalid refresh token"
         )
 
-    user = UserService.get_user_by_username(username)
+    user = UserService.get_user_by_username(db, username)
     if not user or user.disabled:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -196,7 +203,7 @@ async def refresh_token(refresh_request: RefreshTokenRequest):
         401: {"description": "Not authenticated"}
     }
 )
-async def logout(
+def logout(
     current_user: Annotated[User, Depends(get_current_active_user)]
 ):
     return {"message": "Successfully logged out"}
@@ -224,7 +231,7 @@ async def logout(
         401: {"description": "Not authenticated"}
     }
 )
-async def get_auth_user(
+def get_auth_user(
     current_user: Annotated[User, Depends(get_current_active_user)]
 ):
     return current_user

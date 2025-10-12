@@ -30,12 +30,17 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 async def generic_exception_handler(request: Request, exc: Exception):
-    logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
+    import traceback
+    error_detail = f"{type(exc).__name__}: {str(exc)}"
+    traceback_str = ''.join(traceback.format_tb(exc.__traceback__))
+    logger.error(f"Unhandled exception: {error_detail}\n{traceback_str}", exc_info=True)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
             "success": False,
             "error": "Internal server error",
+            "detail": error_detail,
+            "traceback": traceback_str if hasattr(request.state, "debug") else None,
             "status_code": 500,
             "request_id": getattr(request.state, "request_id", None)
         },

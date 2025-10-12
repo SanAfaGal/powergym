@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, status
+from sqlalchemy.orm import Session
 from app.models.face_recognition import (
     FaceRegistrationRequest,
     FaceRegistrationResponse,
@@ -13,6 +14,7 @@ from app.services.face_recognition.core import FaceRecognitionService
 from app.services.client_service import ClientService
 from app.api.dependencies import get_current_user
 from app.models.user import User
+from app.db.session import get_db
 from uuid import UUID
 
 router = APIRouter()
@@ -42,11 +44,12 @@ router = APIRouter()
         401: {"description": "Not authenticated"}
     }
 )
-async def register_client_face(
+def register_client_face(
     request: FaceRegistrationRequest,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
-    client = ClientService.get_client_by_id(request.client_id)
+    client = ClientService.get_client_by_id(db, request.client_id)
     if not client:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -60,6 +63,7 @@ async def register_client_face(
         )
 
     result = FaceRecognitionService.register_face(
+        db=db,
         client_id=request.client_id,
         image_base64=request.image_base64
     )
@@ -105,11 +109,13 @@ async def register_client_face(
         400: {"description": "Invalid image or no face detected"}
     }
 )
-async def authenticate_client_face(
+def authenticate_client_face(
     request: FaceAuthenticationRequest,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     result = FaceRecognitionService.authenticate_face(
+        db=db,
         image_base64=request.image_base64
     )
 
@@ -151,9 +157,10 @@ async def authenticate_client_face(
         401: {"description": "Not authenticated"}
     }
 )
-async def compare_faces(
+def compare_faces(
     request: FaceComparisonRequest,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     result = FaceRecognitionService.compare_two_faces(
         image_base64_1=request.image_base64_1,
@@ -198,11 +205,12 @@ async def compare_faces(
         401: {"description": "Not authenticated"}
     }
 )
-async def update_client_face(
+def update_client_face(
     request: FaceUpdateRequest,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
-    client = ClientService.get_client_by_id(request.client_id)
+    client = ClientService.get_client_by_id(db, request.client_id)
     if not client:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -216,6 +224,7 @@ async def update_client_face(
         )
 
     result = FaceRecognitionService.update_face(
+        db=db,
         client_id=request.client_id,
         image_base64=request.image_base64
     )
@@ -255,18 +264,19 @@ async def update_client_face(
         401: {"description": "Not authenticated"}
     }
 )
-async def delete_client_face(
+def delete_client_face(
     client_id: UUID,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
-    client = ClientService.get_client_by_id(client_id)
+    client = ClientService.get_client_by_id(db, client_id)
     if not client:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="client not found"
         )
 
-    result = FaceRecognitionService.delete_face(client_id=client_id)
+    result = FaceRecognitionService.delete_face(db=db, client_id=client_id)
 
     if not result.get("success"):
         raise HTTPException(

@@ -2,6 +2,8 @@ from datetime import datetime
 from typing import Optional, List
 from uuid import UUID
 from fastapi import APIRouter, HTTPException, Depends, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from app.models.attendance import AttendanceResponse, AttendanceWithClientInfo
 from app.models.face_recognition import FaceAuthenticationRequest
@@ -9,6 +11,7 @@ from app.services.attendance_service import AttendanceService
 from app.services.face_recognition.core import FaceRecognitionService
 from app.api.dependencies import get_current_user
 from app.models.user import User
+from app.db.session import get_async_db, get_db
 
 
 router = APIRouter()
@@ -50,7 +53,9 @@ router = APIRouter()
 )
 async def check_in_with_face(
     request: FaceAuthenticationRequest,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db_sync: Session = Depends(get_db),
+    db_async: AsyncSession = Depends(get_async_db)
 ):
     """
     Check-in a client using face recognition.
@@ -59,6 +64,7 @@ async def check_in_with_face(
     and automatically creates an attendance record upon successful validation.
     """
     auth_result = FaceRecognitionService.authenticate_face(
+        db=db_sync,
         image_base64=request.image_base64
     )
 
@@ -72,11 +78,12 @@ async def check_in_with_face(
     confidence = auth_result.get("confidence", 0.0)
 
     attendance = await AttendanceService.create_attendance(
+        db=db_async,
         client_id=UUID(client_id),
         biometric_type="face",
         meta_info={
             "confidence": confidence,
-            "authenticated_by": str(current_user.username)
+            "authenticated_by": str(current_user.id)
         }
     )
 
@@ -102,10 +109,11 @@ async def check_in_with_face(
 )
 async def get_attendance(
     attendance_id: UUID,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db)
 ):
     """Get a specific attendance record."""
-    attendance = await AttendanceService.get_attendance_by_id(attendance_id)
+    attendance = await AttendanceService.get_attendance_by_id(db, attendance_id)
 
     if not attendance:
         raise HTTPException(
@@ -126,10 +134,12 @@ async def get_client_attendances(
     client_id: UUID,
     limit: int = Query(50, ge=1, le=500, description="Maximum number of records"),
     offset: int = Query(0, ge=0, description="Number of records to skip"),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db)
 ):
     """Get all attendance records for a specific client."""
     attendances = await AttendanceService.get_client_attendances(
+        db=db,
         client_id=client_id,
         limit=limit,
         offset=offset
@@ -149,10 +159,12 @@ async def get_all_attendances(
     offset: int = Query(0, ge=0, description="Number of records to skip"),
     start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
     end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db)
 ):
     """Get all attendance records with client information."""
     attendances = await AttendanceService.get_all_attendances(
+        db=db,
         limit=limit,
         offset=offset,
         start_date=start_date,
@@ -169,10 +181,11 @@ async def get_all_attendances(
     description="Retrieve all attendance records for today."
 )
 async def get_today_attendances(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db)
 ):
     """Get all attendance records for today."""
-    attendances = await AttendanceService.get_today_attendances()
+    attendances = await AttendanceService.get_today_attendances(db)
     return attendances
 
 
@@ -186,10 +199,12 @@ async def count_client_attendances(
     client_id: UUID,
     start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
     end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db)
 ):
     """Count attendance records for a specific client."""
     count = await AttendanceService.count_client_attendances(
+        db=db,
         client_id=client_id,
         start_date=start_date,
         end_date=end_date
