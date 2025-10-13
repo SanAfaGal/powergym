@@ -1,24 +1,23 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func, text
 from app.db.models import ClientBiometricModel, BiometricTypeEnum
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from uuid import UUID
 
 class BiometricRepository:
     @staticmethod
     def create(db: Session, client_id: UUID, biometric_type: BiometricTypeEnum,
-               compressed_data: str, thumbnail: Optional[str] = None,
-               embedding: Optional[str] = None, meta_info: dict = None) -> ClientBiometricModel:
+               thumbnail: Optional[str] = None,
+               embedding_vector: Optional[List[float]] = None, meta_info: dict = None) -> ClientBiometricModel:
         """
         Create a new biometric record in the database.
         """
         db_biometric = ClientBiometricModel(
             client_id=client_id,
             type=biometric_type,
-            compressed_data=compressed_data,
             thumbnail=thumbnail,
-            embedding=embedding,
+            embedding_vector=embedding_vector,
             is_active=True,
             meta_info=meta_info or {}
         )
@@ -107,9 +106,62 @@ class BiometricRepository:
         return True
 
     @staticmethod
+    def search_similar_embeddings(
+        db: Session,
+        embedding_vector: List[float],
+        biometric_type: BiometricTypeEnum,
+        limit: int = 10,
+        distance_threshold: float = 0.6
+    ) -> List[Tuple[ClientBiometricModel, float]]:
+        """
+        Search for similar embeddings using vector similarity.
+        Uses cosine distance operator (<=>).
+
+        Args:
+            db: Database session
+            embedding_vector: 128-dimensional embedding to search for
+            biometric_type: Type of biometric to search
+            limit: Maximum number of results
+            distance_threshold: Maximum distance for matches (lower = more similar)
+
+        Returns:
+            List of tuples (biometric, distance) ordered by similarity
+        """
+        query = text("""
+            SELECT *, embedding_vector <=> :embedding_vector as distance
+            FROM client_biometrics
+            WHERE type = :biometric_type
+              AND is_active = true
+              AND embedding_vector IS NOT NULL
+              AND embedding_vector <=> :embedding_vector <= :distance_threshold
+            ORDER BY distance
+            LIMIT :limit
+        """)
+
+        result = db.execute(
+            query,
+            {
+                "embedding_vector": str(embedding_vector),
+                "biometric_type": biometric_type.value,
+                "distance_threshold": distance_threshold,
+                "limit": limit
+            }
+        )
+
+        results = []
+        for row in result.mappings():
+            biometric = db.query(ClientBiometricModel).filter(
+                ClientBiometricModel.id == row["id"]
+            ).first()
+            if biometric:
+                results.append((biometric, float(row["distance"])))
+
+        return results
+
+    @staticmethod
     async def create_async(db: AsyncSession, client_id: UUID,
-                          biometric_type: BiometricTypeEnum, compressed_data: str,
-                          thumbnail: Optional[str] = None, embedding: Optional[str] = None,
+                          biometric_type: BiometricTypeEnum,
+                          thumbnail: Optional[str] = None, embedding_vector: Optional[List[float]] = None,
                           meta_info: dict = None) -> ClientBiometricModel:
         """
         Create a new biometric record in the database (async).
@@ -117,9 +169,8 @@ class BiometricRepository:
         db_biometric = ClientBiometricModel(
             client_id=client_id,
             type=biometric_type,
-            compressed_data=compressed_data,
             thumbnail=thumbnail,
-            embedding=embedding,
+            embedding_vector=embedding_vector,
             is_active=True,
             meta_info=meta_info or {}
         )
@@ -127,6 +178,60 @@ class BiometricRepository:
         await db.commit()
         await db.refresh(db_biometric)
         return db_biometric
+
+    @staticmethod
+    async def search_similar_embeddings_async(
+        db: AsyncSession,
+        embedding_vector: List[float],
+        biometric_type: BiometricTypeEnum,
+        limit: int = 10,
+        distance_threshold: float = 0.6
+    ) -> List[Tuple[ClientBiometricModel, float]]:
+        """
+        Search for similar embeddings using vector similarity (async).
+        Uses cosine distance operator (<=>).
+
+        Args:
+            db: Async database session
+            embedding_vector: 128-dimensional embedding to search for
+            biometric_type: Type of biometric to search
+            limit: Maximum number of results
+            distance_threshold: Maximum distance for matches
+
+        Returns:
+            List of tuples (biometric, distance) ordered by similarity
+        """
+        query = text("""
+            SELECT *, embedding_vector <=> :embedding_vector as distance
+            FROM client_biometrics
+            WHERE type = :biometric_type
+              AND is_active = true
+              AND embedding_vector IS NOT NULL
+              AND embedding_vector <=> :embedding_vector <= :distance_threshold
+            ORDER BY distance
+            LIMIT :limit
+        """)
+
+        result = await db.execute(
+            query,
+            {
+                "embedding_vector": str(embedding_vector),
+                "biometric_type": biometric_type.value,
+                "distance_threshold": distance_threshold,
+                "limit": limit
+            }
+        )
+
+        results = []
+        for row in result.mappings():
+            biometric_result = await db.execute(
+                select(ClientBiometricModel).filter(ClientBiometricModel.id == row["id"])
+            )
+            biometric = biometric_result.scalar_one_or_none()
+            if biometric:
+                results.append((biometric, float(row["distance"])))
+
+        return results
 
     @staticmethod
     async def get_by_id_async(db: AsyncSession, biometric_id: UUID) -> Optional[ClientBiometricModel]:

@@ -7,8 +7,6 @@ from typing import Optional, Tuple, List
 from uuid import UUID
 from sqlalchemy.orm import Session
 
-from app.core.encryption import get_encryption_service
-from app.core.compression import CompressionService
 from .image_processor import ImageProcessor
 from .embedding import EmbeddingService
 from .database import FaceDatabase
@@ -18,41 +16,32 @@ class FaceRecognitionService:
     """Main service for face recognition operations."""
 
     @staticmethod
-    def extract_face_encoding(image_base64: str) -> Tuple[List[float], bytes, bytes, bytes]:
+    def extract_face_encoding(image_base64: str) -> Tuple[List[float], bytes]:
         """
-        Extract face encoding and process image with optimized compression.
+        Extract face encoding and create thumbnail.
 
         Args:
             image_base64: Base64 encoded image string
 
         Returns:
-            Tuple of (512-dim embedding, compressed_image, thumbnail, original_bytes)
+            Tuple of (128-dim embedding, thumbnail)
 
         Raises:
             ValueError: If image processing or face extraction fails
         """
-        import base64
-
-        if ',' in image_base64:
-            original_bytes = base64.b64decode(image_base64.split(',')[1])
-        else:
-            original_bytes = base64.b64decode(image_base64)
-
         image_array = ImageProcessor.decode_base64_image(image_base64)
 
         face_encoding_128 = EmbeddingService.extract_face_encoding(image_array)
         embedding_128 = face_encoding_128.tolist()
-        embedding_512 = EmbeddingService.expand_embedding_to_512(embedding_128)
 
-        compressed_data = ImageProcessor.compress_image(image_array)
         thumbnail = ImageProcessor.create_thumbnail(image_array)
 
-        return embedding_512, compressed_data, thumbnail, original_bytes
+        return embedding_128, thumbnail
 
     @staticmethod
     async def extract_face_encoding_async(
         image_base64: str
-    ) -> Tuple[List[float], bytes, bytes, bytes]:
+    ) -> Tuple[List[float], bytes]:
         """
         Extract face encoding asynchronously.
 
@@ -60,7 +49,7 @@ class FaceRecognitionService:
             image_base64: Base64 encoded image string
 
         Returns:
-            Tuple of (512-dim embedding, compressed_image, thumbnail, original_bytes)
+            Tuple of (128-dim embedding, thumbnail)
         """
         from app.core.async_processing import run_in_threadpool
         return await run_in_threadpool(
@@ -78,8 +67,8 @@ class FaceRecognitionService:
         Compare two face embeddings.
 
         Args:
-            embedding_1: First embedding (512-dimensional)
-            embedding_2: Second embedding (512-dimensional)
+            embedding_1: First embedding (128-dimensional)
+            embedding_2: Second embedding (128-dimensional)
             tolerance: Similarity threshold
 
         Returns:
@@ -94,7 +83,7 @@ class FaceRecognitionService:
     @staticmethod
     def register_face(db: Session, client_id: UUID, image_base64: str) -> dict:
         """
-        Register a face biometric for a client with compression.
+        Register a face biometric for a client.
 
         Args:
             db: Database session
@@ -102,20 +91,16 @@ class FaceRecognitionService:
             image_base64: Base64 encoded face image
 
         Returns:
-            Dictionary with success status, biometric info, and compression stats
+            Dictionary with success status and biometric info
         """
         try:
-            embedding, compressed_data, thumbnail, original_bytes = (
-                FaceRecognitionService.extract_face_encoding(image_base64)
-            )
+            embedding, thumbnail = FaceRecognitionService.extract_face_encoding(image_base64)
 
             result = FaceDatabase.store_face_biometric(
                 db=db,
                 client_id=client_id,
                 embedding=embedding,
-                compressed_data=compressed_data,
-                thumbnail=thumbnail,
-                original_image_bytes=original_bytes
+                thumbnail=thumbnail
             )
 
             return result
@@ -138,7 +123,7 @@ class FaceRecognitionService:
         tolerance: Optional[float] = None
     ) -> dict:
         """
-        Authenticate a client by face image.
+        Authenticate a client by face image using vector similarity search.
 
         Args:
             db: Database session
@@ -149,73 +134,36 @@ class FaceRecognitionService:
             Dictionary with authentication result and client info
         """
         try:
-            embedding, _, _, _ = FaceRecognitionService.extract_face_encoding(image_base64)
+            embedding, _ = FaceRecognitionService.extract_face_encoding(image_base64)
 
-            biometric_records = FaceDatabase.get_all_active_face_biometrics(db)
+            if tolerance is None:
+                from app.core.config import settings
+                tolerance = settings.FACE_RECOGNITION_TOLERANCE
 
-            if not biometric_records:
+            similar_faces = FaceDatabase.search_similar_faces(
+                db=db,
+                embedding=embedding,
+                limit=5,
+                distance_threshold=tolerance
+            )
+
+            if not similar_faces:
                 return {
                     "success": False,
-                    "error": "No registered faces found in the system"
+                    "error": "No matching face found"
                 }
 
-            encryption_service = get_encryption_service()
-            compression_service = CompressionService()
-            best_match = None
-            best_distance = float('inf')
+            best_match = similar_faces[0]
+            client_info = FaceDatabase.get_client_info(db, best_match["client_id"])
 
-            for biometric in biometric_records:
-                if not biometric.get("embedding"):
-                    continue
-
-                try:
-                    meta_info = biometric.get("meta_info", {})
-                    encoding_version = meta_info.get("encoding_version", "")
-                    is_encrypted = "encrypted" in encoding_version
-                    is_compressed = "compressed" in encoding_version
-
-                    if is_encrypted and is_compressed:
-                        compressed_bytes = encryption_service.decrypt_embedding(
-                            biometric["embedding"],
-                            is_compressed=True
-                        )
-                        stored_embedding = compression_service.decompress_embedding(
-                            compressed_bytes
-                        )
-                    elif is_encrypted:
-                        stored_embedding = encryption_service.decrypt_embedding(
-                            biometric["embedding"]
-                        )
-                    else:
-                        stored_embedding = EmbeddingService.parse_embedding(
-                            biometric["embedding"]
-                        )
-                except ValueError:
-                    continue
-
-                match, distance = FaceRecognitionService.compare_faces(
-                    embedding,
-                    stored_embedding,
-                    tolerance
-                )
-
-                if match and distance < best_distance:
-                    best_distance = distance
-                    best_match = biometric
-
-            if best_match:
-                client_info = FaceDatabase.get_client_info(db, best_match["client_id"])
-
-                if client_info:
-                    confidence = max(0.0, 1.0 - best_distance)
-
-                    return {
-                        "success": True,
-                        "client_id": best_match["client_id"],
-                        "client_info": client_info,
-                        "confidence": confidence,
-                        "distance": best_distance
-                    }
+            if client_info:
+                return {
+                    "success": True,
+                    "client_id": best_match["client_id"],
+                    "client_info": client_info,
+                    "confidence": best_match["similarity"],
+                    "distance": best_match["distance"]
+                }
 
             return {
                 "success": False,
@@ -286,12 +234,8 @@ class FaceRecognitionService:
             Dictionary with comparison result and confidence
         """
         try:
-            embedding_1, _, _, _ = FaceRecognitionService.extract_face_encoding(
-                image_base64_1
-            )
-            embedding_2, _, _, _ = FaceRecognitionService.extract_face_encoding(
-                image_base64_2
-            )
+            embedding_1, _ = FaceRecognitionService.extract_face_encoding(image_base64_1)
+            embedding_2, _ = FaceRecognitionService.extract_face_encoding(image_base64_2)
 
             match, distance = FaceRecognitionService.compare_faces(
                 embedding_1,

@@ -69,28 +69,12 @@ class EmbeddingService:
         )
 
     @staticmethod
-    def expand_embedding_to_512(embedding_128: List[float]) -> List[float]:
+    def validate_embedding_128(embedding: any) -> np.ndarray:
         """
-        Expand 128-dimensional embedding to 512 dimensions for database storage.
+        Validate and convert embedding to 128-dimensional numpy array.
 
         Args:
-            embedding_128: 128-dimensional face encoding
-
-        Returns:
-            512-dimensional embedding as list
-        """
-        embedding_array = np.array(embedding_128)
-        repeated = np.tile(embedding_array, 4)
-        embedding_512 = repeated[:512].tolist()
-        return embedding_512
-
-    @staticmethod
-    def compress_embedding_from_512(embedding_512: any) -> np.ndarray:
-        """
-        Compress 512-dimensional embedding back to 128 dimensions.
-
-        Args:
-            embedding_512: 512-dimensional embedding (list, numpy array, or string)
+            embedding: 128-dimensional embedding (list, numpy array, or string)
 
         Returns:
             128-dimensional embedding as numpy array
@@ -98,10 +82,10 @@ class EmbeddingService:
         Raises:
             ValueError: If embedding format is invalid or dimension mismatch
         """
-        if isinstance(embedding_512, list):
-            parsed_embedding = embedding_512
+        if isinstance(embedding, list):
+            parsed_embedding = embedding
         else:
-            parsed_embedding = EmbeddingService.parse_embedding(embedding_512)
+            parsed_embedding = EmbeddingService.parse_embedding(embedding)
 
         try:
             embedding_array = np.array(parsed_embedding, dtype=np.float64)
@@ -111,12 +95,11 @@ class EmbeddingService:
                 f"type: {type(parsed_embedding)}"
             )
 
-        if len(embedding_array) != 512:
+        if len(embedding_array) != 128:
             raise ValueError(
-                f"Expected 512-dimensional embedding, got {len(embedding_array)} dimensions"
+                f"Expected 128-dimensional embedding, got {len(embedding_array)} dimensions"
             )
 
-        embedding_array = embedding_array[:128]
         return embedding_array
 
     @staticmethod
@@ -167,11 +150,11 @@ class EmbeddingService:
         tolerance: Optional[float] = None
     ) -> Tuple[bool, float]:
         """
-        Compare two face embeddings for similarity.
+        Compare two face embeddings for similarity using Euclidean distance.
 
         Args:
-            embedding_1: First embedding (512-dimensional)
-            embedding_2: Second embedding (512-dimensional)
+            embedding_1: First embedding (128-dimensional)
+            embedding_2: Second embedding (128-dimensional)
             tolerance: Similarity threshold (defaults to config value)
 
         Returns:
@@ -197,10 +180,37 @@ class EmbeddingService:
         except ValueError as e:
             raise ValueError(f"Failed to parse embeddings for comparison: {str(e)}")
 
-        face_encoding_1 = EmbeddingService.compress_embedding_from_512(parsed_embedding_1)
-        face_encoding_2 = EmbeddingService.compress_embedding_from_512(parsed_embedding_2)
+        face_encoding_1 = EmbeddingService.validate_embedding_128(parsed_embedding_1)
+        face_encoding_2 = EmbeddingService.validate_embedding_128(parsed_embedding_2)
 
         distance = np.linalg.norm(face_encoding_1 - face_encoding_2)
         match = distance <= tolerance
 
         return match, float(distance)
+
+    @staticmethod
+    def calculate_cosine_similarity(
+        embedding_1: List[float],
+        embedding_2: List[float]
+    ) -> float:
+        """
+        Calculate cosine similarity between two embeddings.
+
+        Args:
+            embedding_1: First embedding (128-dimensional)
+            embedding_2: Second embedding (128-dimensional)
+
+        Returns:
+            Cosine similarity score (1.0 = identical, 0.0 = orthogonal, -1.0 = opposite)
+        """
+        vec1 = np.array(embedding_1, dtype=np.float64)
+        vec2 = np.array(embedding_2, dtype=np.float64)
+
+        dot_product = np.dot(vec1, vec2)
+        norm1 = np.linalg.norm(vec1)
+        norm2 = np.linalg.norm(vec2)
+
+        if norm1 == 0 or norm2 == 0:
+            return 0.0
+
+        return float(dot_product / (norm1 * norm2))

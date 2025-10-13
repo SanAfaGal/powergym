@@ -1,5 +1,6 @@
 from sqlalchemy import Column, String, Boolean, DateTime, Date, Text, ForeignKey, Enum as SQLEnum, JSON, Float
 from sqlalchemy.dialects.postgresql import UUID
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
@@ -22,7 +23,7 @@ class GenderTypeEnum(str, enum.Enum):
     OTHER = "other"
 
 class BiometricTypeEnum(str, enum.Enum):
-    FACE = "face"
+    FACE = "FACE"
     FINGERPRINT = "fingerprint"
 
 class UserModel(Base):
@@ -66,9 +67,8 @@ class ClientBiometricModel(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     client_id = Column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
     type = Column(SQLEnum(BiometricTypeEnum, name="biometric_type"), nullable=False)
-    compressed_data = Column(Text, nullable=False)
     thumbnail = Column(Text, nullable=True)
-    embedding = Column(Text, nullable=True)
+    embedding_vector = Column(Vector(128), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     meta_info = Column(JSON, default={}, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

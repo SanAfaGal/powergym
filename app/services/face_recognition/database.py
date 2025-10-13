@@ -11,7 +11,6 @@ from app.repositories.biometric_repository import BiometricRepository
 from app.repositories.client_repository import ClientRepository
 from app.db.models import BiometricTypeEnum
 from app.core.encryption import get_encryption_service
-from app.core.compression import CompressionService
 from app.models.biometric import BiometricType
 from app.core.config import settings
 
@@ -24,23 +23,19 @@ class FaceDatabase:
         db: Session,
         client_id: UUID,
         embedding: List[float],
-        compressed_data: bytes,
-        thumbnail: bytes,
-        original_image_bytes: bytes = None
+        thumbnail: bytes
     ) -> dict:
         """
-        Store face biometric data in database with compression and encryption.
-        Pipeline: Compress -> Encrypt -> Store
+        Store face biometric data in database with native vector storage.
+        Only thumbnail is encrypted for privacy.
 
         Args:
             client_id: UUID of the client
-            embedding: 512-dimensional face embedding
-            compressed_data: Compressed face image bytes
+            embedding: 128-dimensional face embedding
             thumbnail: Thumbnail image bytes
-            original_image_bytes: Original image bytes for compression stats (optional)
 
         Returns:
-            Dictionary with success status, biometric_id, and compression stats
+            Dictionary with success status and biometric_id
 
         Raises:
             Exception: If database operation fails
@@ -54,54 +49,30 @@ class FaceDatabase:
                 if biometric.type == BiometricTypeEnum.FACE:
                     BiometricRepository.update(db, biometric.id, is_active=False)
 
-            compression_service = CompressionService()
             encryption_service = get_encryption_service()
-
-            compressed_embedding = compression_service.compress_embedding(embedding)
-            encrypted_embedding = encryption_service.encrypt_embedding(compressed_embedding)
-
-            encrypted_compressed_data = encryption_service.encrypt_image_data(
-                compressed_data
-            )
             encrypted_thumbnail = encryption_service.encrypt_image_data(thumbnail)
 
-            compression_stats = None
-            if original_image_bytes:
-                compression_stats = compression_service.get_compression_stats(
-                    original_embedding=embedding,
-                    compressed_embedding=compressed_embedding,
-                    original_image=original_image_bytes,
-                    compressed_image=compressed_data,
-                    thumbnail=thumbnail
-                )
-
             meta_info = {
-                "encoding_version": "face_recognition_v2_compressed_encrypted",
+                "encoding_version": "face_recognition_v3_vector",
                 "model": settings.FACE_RECOGNITION_MODEL,
-                "compression": "zlib_level_9",
+                "embedding_dimensions": 128,
                 "encryption": "AES-256-GCM",
-                "image_quality": settings.IMAGE_COMPRESSION_QUALITY,
                 "thumbnail_quality": settings.THUMBNAIL_COMPRESSION_QUALITY
             }
-
-            if compression_stats:
-                meta_info["compression_stats"] = compression_stats
 
             biometric = BiometricRepository.create(
                 db=db,
                 client_id=client_id,
                 biometric_type=BiometricTypeEnum.FACE,
-                compressed_data=encrypted_compressed_data,
                 thumbnail=encrypted_thumbnail,
-                embedding=encrypted_embedding,
+                embedding_vector=embedding,
                 meta_info=meta_info
             )
 
             return {
                 "success": True,
                 "biometric_id": str(biometric.id),
-                "client_id": str(client_id),
-                "compression_stats": compression_stats
+                "client_id": str(client_id)
             }
 
         except Exception as e:
@@ -116,7 +87,7 @@ class FaceDatabase:
         Retrieve all active face biometric records from database.
 
         Returns:
-            List of biometric records with encrypted data
+            List of biometric records with vector embeddings
 
         Raises:
             Exception: If database query fails
@@ -130,7 +101,7 @@ class FaceDatabase:
                 {
                     "id": str(bio.id),
                     "client_id": str(bio.client_id),
-                    "embedding": bio.embedding,
+                    "embedding_vector": bio.embedding_vector,
                     "meta_info": bio.meta_info
                 }
                 for bio in biometrics
@@ -138,6 +109,52 @@ class FaceDatabase:
 
         except Exception as e:
             raise Exception(f"Failed to retrieve biometric data: {str(e)}")
+
+    @staticmethod
+    def search_similar_faces(
+        db: Session,
+        embedding: List[float],
+        limit: int = 10,
+        distance_threshold: float = 0.6
+    ) -> List[dict]:
+        """
+        Search for similar faces using native vector similarity.
+
+        Args:
+            db: Database session
+            embedding: 128-dimensional face embedding to search for
+            limit: Maximum number of results
+            distance_threshold: Maximum cosine distance for matches
+
+        Returns:
+            List of matching biometric records with similarity scores
+
+        Raises:
+            Exception: If search operation fails
+        """
+        try:
+            results = BiometricRepository.search_similar_embeddings(
+                db=db,
+                embedding_vector=embedding,
+                biometric_type=BiometricTypeEnum.FACE,
+                limit=limit,
+                distance_threshold=distance_threshold
+            )
+
+            return [
+                {
+                    "id": str(bio.id),
+                    "client_id": str(bio.client_id),
+                    "embedding_vector": bio.embedding_vector,
+                    "distance": distance,
+                    "similarity": 1.0 - distance,
+                    "meta_info": bio.meta_info
+                }
+                for bio, distance in results
+            ]
+
+        except Exception as e:
+            raise Exception(f"Failed to search similar faces: {str(e)}")
 
     @staticmethod
     def get_client_info(db: Session, client_id: str) -> Optional[dict]:
