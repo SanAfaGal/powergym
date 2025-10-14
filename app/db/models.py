@@ -23,7 +23,7 @@ class GenderTypeEnum(str, Enum):
     OTHER = "other"
 
 class BiometricTypeEnum(str, Enum):
-    FACE = "face"
+    FACE = "FACE"
     FINGERPRINT = "fingerprint"
 
 class DurationTypeEnum(str, Enum):
@@ -75,7 +75,6 @@ class ClientModel(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    # subscriptions = relationship("SubscriptionModel", back_populates="client")
     biometrics = relationship("ClientBiometricModel", back_populates="client", cascade="all, delete-orphan")
     attendances = relationship("AttendanceModel", back_populates="client", cascade="all, delete-orphan")
 

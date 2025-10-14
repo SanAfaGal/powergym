@@ -11,7 +11,6 @@ from app.repositories.biometric_repository import BiometricRepository
 from app.repositories.client_repository import ClientRepository
 from app.db.models import BiometricTypeEnum
 from app.core.encryption import get_encryption_service
-from app.models.biometric import BiometricType
 from app.core.config import settings
 
 
