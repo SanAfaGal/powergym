@@ -32,11 +32,7 @@ router = APIRouter()
                         "plan_id": "123e4567-e89b-12d3-a456-426614174002",
                         "start_date": "2025-01-01",
                         "end_date": "2025-02-01",
-                        "original_price": 50000.00,
-                        "discount_amount": 5000.00,
-                        "final_price": 45000.00,
                         "status": "pending_payment",
-                        "auto_renew": False,
                         "created_at": "2025-10-13T10:30:00Z",
                         "updated_at": "2025-10-13T10:30:00Z"
                     }
@@ -90,11 +86,7 @@ def create_subscription(
                             "plan_id": "123e4567-e89b-12d3-a456-426614174002",
                             "start_date": "2025-01-01",
                             "end_date": "2025-02-01",
-                            "original_price": 50000.00,
-                            "discount_amount": 5000.00,
-                            "final_price": 45000.00,
                             "status": "active",
-                            "auto_renew": False,
                             "created_at": "2025-10-13T10:30:00Z",
                             "updated_at": "2025-10-13T10:30:00Z"
                         }
@@ -139,11 +131,7 @@ def list_subscriptions(
                             "plan_id": "123e4567-e89b-12d3-a456-426614174002",
                             "start_date": "2025-01-01",
                             "end_date": "2025-02-01",
-                            "original_price": 50000.00,
-                            "discount_amount": 5000.00,
-                            "final_price": 45000.00,
                             "status": "active",
-                            "auto_renew": False,
                             "created_at": "2025-10-13T10:30:00Z",
                             "updated_at": "2025-10-13T10:30:00Z"
                         }
@@ -237,11 +225,7 @@ def get_active_subscriptions_by_client(
                             "plan_id": "123e4567-e89b-12d3-a456-426614174002",
                             "start_date": "2025-01-01",
                             "end_date": "2025-02-01",
-                            "original_price": 50000.00,
-                            "discount_amount": 5000.00,
-                            "final_price": 45000.00,
                             "status": "active",
-                            "auto_renew": False,
                             "created_at": "2025-10-13T10:30:00Z",
                             "updated_at": "2025-10-13T10:30:00Z"
                         }
@@ -288,11 +272,7 @@ def get_subscriptions_by_plan(
                             "plan_id": "123e4567-e89b-12d3-a456-426614174002",
                             "start_date": "2025-01-01",
                             "end_date": "2025-02-01",
-                            "original_price": 50000.00,
-                            "discount_amount": 5000.00,
-                            "final_price": 45000.00,
                             "status": "active",
-                            "auto_renew": False,
                             "created_at": "2025-10-13T10:30:00Z",
                             "updated_at": "2025-10-13T10:30:00Z"
                         }
@@ -386,11 +366,7 @@ def get_subscription(
                         "plan_id": "123e4567-e89b-12d3-a456-426614174002",
                         "start_date": "2025-01-01",
                         "end_date": "2025-03-01",
-                        "original_price": 50000.00,
-                        "discount_amount": 5000.00,
-                        "final_price": 45000.00,
                         "status": "active",
-                        "auto_renew": True,
                         "created_at": "2025-10-13T10:30:00Z",
                         "updated_at": "2025-10-13T12:00:00Z"
                     }
@@ -445,11 +421,7 @@ def update_subscription(
                         "plan_id": "123e4567-e89b-12d3-a456-426614174002",
                         "start_date": "2025-01-01",
                         "end_date": "2025-02-01",
-                        "original_price": 50000.00,
-                        "discount_amount": 5000.00,
-                        "final_price": 45000.00,
                         "status": "canceled",
-                        "auto_renew": False,
                         "cancellation_date": "2025-10-13",
                         "cancellation_reason": "Customer request",
                         "created_at": "2025-10-13T10:30:00Z",

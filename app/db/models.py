@@ -1,51 +1,47 @@
-from sqlalchemy import Column, String, Boolean, DateTime, Date, Text, ForeignKey, Enum as SQLEnum, JSON, Numeric, Integer, CheckConstraint
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, Boolean, DateTime, Date, Text, ForeignKey, JSON, Numeric, Integer, CheckConstraint
+from sqlalchemy.dialects.postgresql import UUID, ENUM
 from pgvector.sqlalchemy import Vector
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
-import enum
 from app.db.base import Base
+from enum import Enum
 
-class UserRoleEnum(str, enum.Enum):
+class UserRoleEnum(str, Enum):
     ADMIN = "admin"
     EMPLOYEE = "employee"
 
-class DocumentTypeEnum(str, enum.Enum):
+class DocumentTypeEnum(str, Enum):
     CC = "CC"
     TI = "TI"
     CE = "CE"
     PP = "PP"
 
-class GenderTypeEnum(str, enum.Enum):
+class GenderTypeEnum(str, Enum):
     MALE = "male"
     FEMALE = "female"
     OTHER = "other"
 
-class BiometricTypeEnum(str, enum.Enum):
-    FACE = "FACE"
+class BiometricTypeEnum(str, Enum):
+    FACE = "face"
     FINGERPRINT = "fingerprint"
 
-class DurationTypeEnum(str, enum.Enum):
+class DurationTypeEnum(str, Enum):
     DAY = "day"
     WEEK = "week"
     MONTH = "month"
     YEAR = "year"
 
-class SubscriptionStatusEnum(str, enum.Enum):
+class SubscriptionStatusEnum(str, Enum):
     ACTIVE = "active"
     EXPIRED = "expired"
     PENDING_PAYMENT = "pending_payment"
     CANCELED = "canceled"
 
-class PaymentMethodEnum(str, enum.Enum):
+class PaymentMethodEnum(str, Enum):
     CASH = "cash"
     QR = "qr"
 
-class PaymentStatusEnum(str, enum.Enum):
-    PENDING = "pending"
-    COMPLETED = "completed"
-    FAILED = "failed"
 
 class UserModel(Base):
     __tablename__ = "users"
@@ -54,7 +50,7 @@ class UserModel(Base):
     email = Column(String, unique=True, index=True, nullable=True)
     full_name = Column(String, nullable=True)
     hashed_password = Column(String, nullable=False)
-    role = Column(SQLEnum(UserRoleEnum, name="user_role"), nullable=False, default=UserRoleEnum.EMPLOYEE)
+    role = Column(ENUM(UserRoleEnum, name="user_role"), nullable=False, default=UserRoleEnum.EMPLOYEE)
     disabled = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
@@ -63,7 +59,7 @@ class ClientModel(Base):
     __tablename__ = "clients"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    dni_type = Column(SQLEnum(DocumentTypeEnum, name="document_type"), nullable=False)
+    dni_type = Column(ENUM(DocumentTypeEnum, name="document_type"), nullable=False)
     dni_number = Column(String, unique=True, index=True, nullable=False)
     first_name = Column(String, nullable=False)
     middle_name = Column(String, nullable=True)
@@ -72,7 +68,7 @@ class ClientModel(Base):
     phone = Column(String, nullable=False)
     alternative_phone = Column(String, nullable=True)
     birth_date = Column(Date, nullable=False)
-    gender = Column(SQLEnum(GenderTypeEnum, name="gender_type"), nullable=False)
+    gender = Column(ENUM(GenderTypeEnum, name="gender_type"), nullable=False)
     address = Column(String, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     meta_info = Column(JSON, default={}, nullable=False)
@@ -88,7 +84,7 @@ class ClientBiometricModel(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     client_id = Column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
-    type = Column(SQLEnum(BiometricTypeEnum, name="biometric_type"), nullable=False)
+    type = Column(ENUM(BiometricTypeEnum, name="biometric_type"), nullable=False)
     thumbnail = Column(Text, nullable=True)
     embedding_vector = Column(Vector(128), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
@@ -117,7 +113,7 @@ class PlanModel(Base):
     description = Column(Text, nullable=True)
     price = Column(Numeric(10, 2), nullable=False)
     currency = Column(String(3), default="COP", nullable=False)
-    duration_unit = Column(SQLEnum(DurationTypeEnum, name="duration_type"), nullable=False)
+    duration_unit = Column(ENUM(DurationTypeEnum, name="duration_type"), nullable=False)
     duration_count = Column(Integer, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -138,7 +134,7 @@ class SubscriptionModel(Base):
     plan_id = Column(UUID(as_uuid=True), ForeignKey("plans.id", ondelete="RESTRICT"), nullable=False, index=True)
     start_date = Column(Date, nullable=False)
     end_date = Column(Date, nullable=False)
-    status = Column(SQLEnum(SubscriptionStatusEnum, name="subscription_status"), nullable=False, default=SubscriptionStatusEnum.PENDING_PAYMENT)
+    status = Column(ENUM(SubscriptionStatusEnum, name="subscription_status"), nullable=False, default=SubscriptionStatusEnum.PENDING_PAYMENT)
     cancellation_date = Column(Date, nullable=True)
     cancellation_reason = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -159,7 +155,7 @@ class PaymentModel(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     subscription_id = Column(UUID(as_uuid=True), ForeignKey("subscriptions.id", ondelete="CASCADE"), nullable=False, index=True)
     amount = Column(Numeric(10, 2), nullable=False)
-    payment_method = Column(SQLEnum(PaymentMethodEnum, name="payment_method"), nullable=False)
+    payment_method = Column(ENUM(PaymentMethodEnum, name="payment_method"), nullable=False)
     payment_date = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     meta_info = Column(JSON, default={}, nullable=False)
 

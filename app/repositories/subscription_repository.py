@@ -10,9 +10,8 @@ from decimal import Decimal
 class SubscriptionRepository:
     @staticmethod
     def create(db: Session, client_id: UUID, plan_id: UUID, start_date: date,
-               end_date: date, original_price: Decimal, discount_amount: Decimal,
-               final_price: Decimal, status: SubscriptionStatusEnum = SubscriptionStatusEnum.PENDING_PAYMENT,
-               auto_renew: bool = False) -> SubscriptionModel:
+               end_date: date, status: SubscriptionStatusEnum = SubscriptionStatusEnum.PENDING_PAYMENT,
+               meta_info: dict = None) -> SubscriptionModel:
         """
         Create a new subscription in the database.
         """
@@ -21,11 +20,8 @@ class SubscriptionRepository:
             plan_id=plan_id,
             start_date=start_date,
             end_date=end_date,
-            original_price=original_price,
-            discount_amount=discount_amount,
-            final_price=final_price,
             status=status,
-            auto_renew=auto_renew
+            meta_info=meta_info or {}
         )
         db.add(db_subscription)
         db.commit()
@@ -146,10 +142,8 @@ class SubscriptionRepository:
 
     @staticmethod
     async def create_async(db: AsyncSession, client_id: UUID, plan_id: UUID,
-                          start_date: date, end_date: date, original_price: Decimal,
-                          discount_amount: Decimal, final_price: Decimal,
-                          status: SubscriptionStatusEnum = SubscriptionStatusEnum.PENDING_PAYMENT,
-                          auto_renew: bool = False) -> SubscriptionModel:
+                          start_date: date, end_date: date,
+                          status: SubscriptionStatusEnum = SubscriptionStatusEnum.PENDING_PAYMENT) -> SubscriptionModel:
         """
         Create a new subscription in the database (async).
         """
@@ -158,11 +152,7 @@ class SubscriptionRepository:
             plan_id=plan_id,
             start_date=start_date,
             end_date=end_date,
-            original_price=original_price,
-            discount_amount=discount_amount,
-            final_price=final_price,
-            status=status,
-            auto_renew=auto_renew
+            status=status
         )
         db.add(db_subscription)
         await db.commit()

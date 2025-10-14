@@ -34,11 +34,7 @@ class SubscriptionService:
             plan_id=subscription_data.plan_id,
             start_date=subscription_data.start_date,
             end_date=subscription_data.end_date,
-            original_price=subscription_data.original_price,
-            discount_amount=subscription_data.discount_amount,
-            final_price=subscription_data.final_price,
-            status=status_enum,
-            auto_renew=subscription_data.auto_renew
+            status=status_enum
         )
 
         return Subscription(
@@ -47,11 +43,7 @@ class SubscriptionService:
             plan_id=subscription_model.plan_id,
             start_date=subscription_model.start_date,
             end_date=subscription_model.end_date,
-            original_price=subscription_model.original_price,
-            discount_amount=subscription_model.discount_amount,
-            final_price=subscription_model.final_price,
             status=SubscriptionStatus(subscription_model.status.value),
-            auto_renew=subscription_model.auto_renew,
             cancellation_date=subscription_model.cancellation_date,
             cancellation_reason=subscription_model.cancellation_reason,
             created_at=subscription_model.created_at,
@@ -73,11 +65,7 @@ class SubscriptionService:
                 plan_id=subscription_model.plan_id,
                 start_date=subscription_model.start_date,
                 end_date=subscription_model.end_date,
-                original_price=subscription_model.original_price,
-                discount_amount=subscription_model.discount_amount,
-                final_price=subscription_model.final_price,
                 status=SubscriptionStatus(subscription_model.status.value),
-                auto_renew=subscription_model.auto_renew,
                 cancellation_date=subscription_model.cancellation_date,
                 cancellation_reason=subscription_model.cancellation_reason,
                 created_at=subscription_model.created_at,
@@ -105,11 +93,7 @@ class SubscriptionService:
                 plan_id=sub.plan_id,
                 start_date=sub.start_date,
                 end_date=sub.end_date,
-                original_price=sub.original_price,
-                discount_amount=sub.discount_amount,
-                final_price=sub.final_price,
                 status=SubscriptionStatus(sub.status.value),
-                auto_renew=sub.auto_renew,
                 cancellation_date=sub.cancellation_date,
                 cancellation_reason=sub.cancellation_reason,
                 created_at=sub.created_at,
@@ -138,11 +122,7 @@ class SubscriptionService:
                 plan_id=sub.plan_id,
                 start_date=sub.start_date,
                 end_date=sub.end_date,
-                original_price=sub.original_price,
-                discount_amount=sub.discount_amount,
-                final_price=sub.final_price,
                 status=SubscriptionStatus(sub.status.value),
-                auto_renew=sub.auto_renew,
                 cancellation_date=sub.cancellation_date,
                 cancellation_reason=sub.cancellation_reason,
                 created_at=sub.created_at,
@@ -172,11 +152,7 @@ class SubscriptionService:
                 plan_id=sub.plan_id,
                 start_date=sub.start_date,
                 end_date=sub.end_date,
-                original_price=sub.original_price,
-                discount_amount=sub.discount_amount,
-                final_price=sub.final_price,
                 status=SubscriptionStatus(sub.status.value),
-                auto_renew=sub.auto_renew,
                 cancellation_date=sub.cancellation_date,
                 cancellation_reason=sub.cancellation_reason,
                 created_at=sub.created_at,
@@ -200,11 +176,7 @@ class SubscriptionService:
                 plan_id=sub.plan_id,
                 start_date=sub.start_date,
                 end_date=sub.end_date,
-                original_price=sub.original_price,
-                discount_amount=sub.discount_amount,
-                final_price=sub.final_price,
                 status=SubscriptionStatus(sub.status.value),
-                auto_renew=sub.auto_renew,
                 cancellation_date=sub.cancellation_date,
                 cancellation_reason=sub.cancellation_reason,
                 created_at=sub.created_at,
@@ -232,11 +204,7 @@ class SubscriptionService:
                 plan_id=sub.plan_id,
                 start_date=sub.start_date,
                 end_date=sub.end_date,
-                original_price=sub.original_price,
-                discount_amount=sub.discount_amount,
-                final_price=sub.final_price,
                 status=SubscriptionStatus(sub.status.value),
-                auto_renew=sub.auto_renew,
                 cancellation_date=sub.cancellation_date,
                 cancellation_reason=sub.cancellation_reason,
                 created_at=sub.created_at,
@@ -261,16 +229,8 @@ class SubscriptionService:
             update_dict["start_date"] = subscription_update.start_date
         if subscription_update.end_date is not None:
             update_dict["end_date"] = subscription_update.end_date
-        if subscription_update.original_price is not None:
-            update_dict["original_price"] = subscription_update.original_price
-        if subscription_update.discount_amount is not None:
-            update_dict["discount_amount"] = subscription_update.discount_amount
-        if subscription_update.final_price is not None:
-            update_dict["final_price"] = subscription_update.final_price
         if subscription_update.status is not None:
             update_dict["status"] = SubscriptionStatusEnum[subscription_update.status.value.upper()]
-        if subscription_update.auto_renew is not None:
-            update_dict["auto_renew"] = subscription_update.auto_renew
         if subscription_update.cancellation_date is not None:
             update_dict["cancellation_date"] = subscription_update.cancellation_date
         if subscription_update.cancellation_reason is not None:
@@ -288,11 +248,7 @@ class SubscriptionService:
                 plan_id=subscription_model.plan_id,
                 start_date=subscription_model.start_date,
                 end_date=subscription_model.end_date,
-                original_price=subscription_model.original_price,
-                discount_amount=subscription_model.discount_amount,
-                final_price=subscription_model.final_price,
                 status=SubscriptionStatus(subscription_model.status.value),
-                auto_renew=subscription_model.auto_renew,
                 cancellation_date=subscription_model.cancellation_date,
                 cancellation_reason=subscription_model.cancellation_reason,
                 created_at=subscription_model.created_at,
@@ -319,11 +275,7 @@ class SubscriptionService:
                 plan_id=subscription_model.plan_id,
                 start_date=subscription_model.start_date,
                 end_date=subscription_model.end_date,
-                original_price=subscription_model.original_price,
-                discount_amount=subscription_model.discount_amount,
-                final_price=subscription_model.final_price,
                 status=SubscriptionStatus(subscription_model.status.value),
-                auto_renew=subscription_model.auto_renew,
                 cancellation_date=subscription_model.cancellation_date,
                 cancellation_reason=subscription_model.cancellation_reason,
                 created_at=subscription_model.created_at,
@@ -361,11 +313,7 @@ class SubscriptionService:
                 plan_id=subscription_model.plan_id,
                 start_date=subscription_model.start_date,
                 end_date=subscription_model.end_date,
-                original_price=subscription_model.original_price,
-                discount_amount=subscription_model.discount_amount,
-                final_price=subscription_model.final_price,
                 status=SubscriptionStatus(subscription_model.status.value),
-                auto_renew=subscription_model.auto_renew,
                 cancellation_date=subscription_model.cancellation_date,
                 cancellation_reason=subscription_model.cancellation_reason,
                 created_at=subscription_model.created_at,
