@@ -23,7 +23,7 @@ class GenderTypeEnum(str, enum.Enum):
     OTHER = "other"
 
 class BiometricTypeEnum(str, enum.Enum):
-    FACE = "face"
+    FACE = "FACE"
     FINGERPRINT = "fingerprint"
 
 class DurationTypeEnum(str, enum.Enum):
@@ -79,6 +79,7 @@ class ClientModel(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
+    # subscriptions = relationship("SubscriptionModel", back_populates="client")
     biometrics = relationship("ClientBiometricModel", back_populates="client", cascade="all, delete-orphan")
     attendances = relationship("AttendanceModel", back_populates="client", cascade="all, delete-orphan")
 
@@ -103,7 +104,6 @@ class AttendanceModel(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     client_id = Column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
     check_in = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    biometric_type = Column(String, nullable=True)
     meta_info = Column(JSON, default={}, nullable=False)
 
     client = relationship("ClientModel", back_populates="attendances")
@@ -138,11 +138,7 @@ class SubscriptionModel(Base):
     plan_id = Column(UUID(as_uuid=True), ForeignKey("plans.id", ondelete="RESTRICT"), nullable=False, index=True)
     start_date = Column(Date, nullable=False)
     end_date = Column(Date, nullable=False)
-    original_price = Column(Numeric(10, 2), nullable=False)
-    discount_amount = Column(Numeric(10, 2), default=0, nullable=False)
-    final_price = Column(Numeric(10, 2), nullable=False)
     status = Column(SQLEnum(SubscriptionStatusEnum, name="subscription_status"), nullable=False, default=SubscriptionStatusEnum.PENDING_PAYMENT)
-    auto_renew = Column(Boolean, default=False, nullable=False)
     cancellation_date = Column(Date, nullable=True)
     cancellation_reason = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -155,7 +151,6 @@ class SubscriptionModel(Base):
 
     __table_args__ = (
         CheckConstraint("end_date > start_date", name="subscriptions_dates_check"),
-        CheckConstraint("final_price >= 0", name="subscriptions_price_check"),
     )
 
 class PaymentModel(Base):
@@ -164,12 +159,8 @@ class PaymentModel(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     subscription_id = Column(UUID(as_uuid=True), ForeignKey("subscriptions.id", ondelete="CASCADE"), nullable=False, index=True)
     amount = Column(Numeric(10, 2), nullable=False)
-    currency = Column(String(3), default="COP", nullable=False)
     payment_method = Column(SQLEnum(PaymentMethodEnum, name="payment_method"), nullable=False)
-    status = Column(SQLEnum(PaymentStatusEnum, name="payment_status"), nullable=False, default=PaymentStatusEnum.PENDING)
     payment_date = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     meta_info = Column(JSON, default={}, nullable=False)
 
     subscription = relationship("SubscriptionModel", back_populates="payments")

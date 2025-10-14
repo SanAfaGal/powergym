@@ -8,14 +8,13 @@ from datetime import datetime
 
 class AttendanceRepository:
     @staticmethod
-    def create(db: Session, client_id: UUID, biometric_type: Optional[str] = None,
+    def create(db: Session, client_id: UUID,
                meta_info: dict = None) -> AttendanceModel:
         """
         Create a new attendance record in the database.
         """
         db_attendance = AttendanceModel(
             client_id=client_id,
-            biometric_type=biometric_type,
             meta_info=meta_info or {}
         )
         db.add(db_attendance)
@@ -78,14 +77,12 @@ class AttendanceRepository:
 
     @staticmethod
     async def create_async(db: AsyncSession, client_id: UUID,
-                          biometric_type: Optional[str] = None,
                           meta_info: dict = None) -> AttendanceModel:
         """
         Create a new attendance record in the database (async).
         """
         db_attendance = AttendanceModel(
             client_id=client_id,
-            biometric_type=biometric_type,
             meta_info=meta_info or {}
         )
         db.add(db_attendance)

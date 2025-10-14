@@ -15,13 +15,11 @@ class AttendanceService:
     async def create_attendance(
         db: AsyncSession,
         client_id: UUID,
-        biometric_type: Optional[str] = None,
         meta_info: Optional[dict] = None
     ) -> AttendanceResponse:
         attendance_model = await AttendanceRepository.create_async(
             db=db,
             client_id=client_id,
-            biometric_type=biometric_type,
             meta_info=meta_info or {}
         )
 
@@ -29,7 +27,6 @@ class AttendanceService:
             id=attendance_model.id,
             client_id=attendance_model.client_id,
             check_in=attendance_model.check_in,
-            biometric_type=attendance_model.biometric_type,
             meta_info=attendance_model.meta_info
         )
 
@@ -42,7 +39,6 @@ class AttendanceService:
                 id=attendance_model.id,
                 client_id=attendance_model.client_id,
                 check_in=attendance_model.check_in,
-                biometric_type=attendance_model.biometric_type,
                 meta_info=attendance_model.meta_info
             )
         return None
@@ -63,7 +59,6 @@ class AttendanceService:
                 id=att.id,
                 client_id=att.client_id,
                 check_in=att.check_in,
-                biometric_type=att.biometric_type,
                 meta_info=att.meta_info
             )
             for att in attendance_models
@@ -107,7 +102,6 @@ class AttendanceService:
                 id=att.id,
                 client_id=att.client_id,
                 check_in=att.check_in,
-                biometric_type=att.biometric_type,
                 meta_info=att.meta_info,
                 client_first_name=first_name,
                 client_last_name=last_name,

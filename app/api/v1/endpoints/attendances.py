@@ -35,7 +35,6 @@ router = APIRouter()
                             "id": "123e4567-e89b-12d3-a456-426614174000",
                             "client_id": "987fcdeb-51a2-43f1-9876-543210fedcba",
                             "check_in": "2025-10-07T10:30:00Z",
-                            "biometric_type": "face"
                         },
                         "client_info": {
                             "first_name": "Juan",
@@ -80,10 +79,9 @@ async def check_in_with_face(
     attendance = await AttendanceService.create_attendance(
         db=db_async,
         client_id=UUID(client_id),
-        biometric_type="face",
         meta_info={
             "confidence": confidence,
-            "authenticated_by": str(current_user.id)
+            "authenticated_by": str(current_user.username)
         }
     )
 
@@ -94,7 +92,6 @@ async def check_in_with_face(
             "id": str(attendance.id),
             "client_id": str(attendance.client_id),
             "check_in": attendance.check_in.isoformat(),
-            "biometric_type": attendance.biometric_type
         },
         "client_info": auth_result.get("client_info"),
         "confidence": confidence
