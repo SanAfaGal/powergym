@@ -52,8 +52,8 @@ class FaceDatabase:
             encrypted_thumbnail = encryption_service.encrypt_image_data(thumbnail)
 
             meta_info = {
-                "encoding_version": "face_recognition_v3_vector",
-                "model": settings.FACE_RECOGNITION_MODEL,
+                "encoding_version": "mediapipe_v1_vector",
+                "model": "MediaPipe FaceMesh + FaceDetection",
                 "embedding_dimensions": 128,
                 "encryption": "AES-256-GCM",
                 "thumbnail_quality": settings.THUMBNAIL_COMPRESSION_QUALITY

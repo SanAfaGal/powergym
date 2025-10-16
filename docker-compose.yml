@@ -1,38 +1,41 @@
-version: '3.8'
+networks:
+  powergym_network:
+    driver: bridge
 
 services:
   postgres:
-    image: pgvector/pgvector:pg16
-    container_name: ${POSTGRES_DB}_container
+    image: pgvector/pgvector:0.8.1-pg18-trixie
+    container_name: powergym_db
     restart: unless-stopped
+    networks:
+      - powergym_network
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_INITDB_ARGS: "-E UTF8"
     ports:
       - "${POSTGRES_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init-scripts:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   adminer:
     image: adminer:latest
-    container_name: adminer_container
+    container_name: powergym_adminer
     restart: unless-stopped
+    networks:
+      - powergym_network
     ports:
       - "${ADMINER_PORT}:8080"
     environment:
       ADMINER_DEFAULT_SERVER: postgres
     depends_on:
-      postgres:
-        condition: service_healthy
+      - postgres
 
 volumes:
   postgres_data:

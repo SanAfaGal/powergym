@@ -1,11 +1,12 @@
 """
 Embedding generation and comparison utilities for face recognition.
-Handles face encoding extraction and similarity calculations.
+Handles face encoding extraction and similarity calculations using MediaPipe.
 """
 
 from typing import List, Tuple, Optional
 import numpy as np
-import face_recognition
+import mediapipe as mp
+import cv2
 
 from app.core.config import settings
 from app.core.async_processing import run_in_threadpool
@@ -14,10 +15,38 @@ from app.core.async_processing import run_in_threadpool
 class EmbeddingService:
     """Handles face embedding generation and comparison operations."""
 
+    _face_mesh = None
+    _face_detection = None
+
+    @classmethod
+    def _get_face_mesh(cls):
+        """Lazy initialization of MediaPipe FaceMesh."""
+        if cls._face_mesh is None:
+            min_confidence = settings.MEDIAPIPE_MIN_DETECTION_CONFIDENCE
+            cls._face_mesh = mp.solutions.face_mesh.FaceMesh(
+                static_image_mode=True,
+                max_num_faces=2,
+                refine_landmarks=True,
+                min_detection_confidence=min_confidence,
+                min_tracking_confidence=min_confidence
+            )
+        return cls._face_mesh
+
+    @classmethod
+    def _get_face_detection(cls):
+        """Lazy initialization of MediaPipe FaceDetection."""
+        if cls._face_detection is None:
+            min_confidence = settings.MEDIAPIPE_MIN_DETECTION_CONFIDENCE
+            cls._face_detection = mp.solutions.face_detection.FaceDetection(
+                model_selection=1,
+                min_detection_confidence=min_confidence
+            )
+        return cls._face_detection
+
     @staticmethod
     def extract_face_encoding(image_array: np.ndarray) -> np.ndarray:
         """
-        Extract face encoding from an image array.
+        Extract face encoding from an image array using MediaPipe.
 
         Args:
             image_array: Image as numpy array in RGB format
@@ -28,29 +57,74 @@ class EmbeddingService:
         Raises:
             ValueError: If no face, multiple faces, or encoding extraction fails
         """
-        face_locations = face_recognition.face_locations(
-            image_array,
-            model=settings.FACE_RECOGNITION_MODEL
-        )
+        face_detection = EmbeddingService._get_face_detection()
 
-        if len(face_locations) == 0:
+        results = face_detection.process(image_array)
+
+        if not results.detections:
             raise ValueError("No face detected in the image")
 
-        if len(face_locations) > 1:
+        if len(results.detections) > 1:
             raise ValueError(
                 "Multiple faces detected. Please provide an image with a single face"
             )
 
-        face_encodings = face_recognition.face_encodings(
-            image_array,
-            known_face_locations=face_locations,
-            num_jitters=2
-        )
+        face_mesh = EmbeddingService._get_face_mesh()
+        mesh_results = face_mesh.process(image_array)
 
-        if len(face_encodings) == 0:
-            raise ValueError("Could not extract face encoding from the detected face")
+        if not mesh_results.multi_face_landmarks:
+            raise ValueError("Could not extract face landmarks from the detected face")
 
-        return face_encodings[0]
+        landmarks = mesh_results.multi_face_landmarks[0]
+
+        embedding = EmbeddingService._landmarks_to_embedding(landmarks, image_array.shape)
+
+        return embedding
+
+    @staticmethod
+    def _landmarks_to_embedding(landmarks, image_shape) -> np.ndarray:
+        """
+        Convert MediaPipe face landmarks to a 128-dimensional embedding.
+
+        Args:
+            landmarks: MediaPipe face landmarks
+            image_shape: Shape of the original image (height, width, channels)
+
+        Returns:
+            128-dimensional embedding vector
+        """
+        height, width = image_shape[:2]
+
+        key_points = []
+        for idx in [1, 33, 61, 199, 263, 291, 4, 152, 10, 338, 297,
+                    332, 284, 251, 389, 356, 454, 323, 361, 288, 397,
+                    365, 379, 378, 400, 377, 152, 148, 176, 149, 150,
+                    136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103,
+                    67, 109, 10, 338, 297, 332, 284]:
+            landmark = landmarks.landmark[idx]
+            key_points.extend([landmark.x * width, landmark.y * height, landmark.z])
+
+        key_points_array = np.array(key_points, dtype=np.float64)
+
+        centroid = key_points_array.reshape(-1, 3).mean(axis=0)
+        normalized_points = key_points_array.reshape(-1, 3) - centroid
+
+        scale = np.linalg.norm(normalized_points, axis=1).max()
+        if scale > 0:
+            normalized_points = normalized_points / scale
+
+        embedding = normalized_points.flatten()
+
+        if len(embedding) < 128:
+            embedding = np.pad(embedding, (0, 128 - len(embedding)), mode='constant')
+        elif len(embedding) > 128:
+            embedding = embedding[:128]
+
+        norm = np.linalg.norm(embedding)
+        if norm > 0:
+            embedding = embedding / norm
+
+        return embedding
 
     @staticmethod
     async def extract_face_encoding_async(image_array: np.ndarray) -> np.ndarray:

@@ -145,47 +145,6 @@ def search_clients(
     clients = ClientService.search_clients(db=db, search_term=q, limit=limit)
     return clients
 
-@router.get(
-    "/dni/{dni_number}",
-    response_model=Client,
-    summary="Get client by DNI",
-    description="Retrieve a specific client by their DNI number.",
-    responses={
-        200: {
-            "description": "Client found",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "id": "123e4567-e89b-12d3-a456-426614174000",
-                        "first_name": "Juan",
-                        "last_name": "Pérez",
-                        "dni_type": "DNI",
-                        "dni_number": "12345678",
-                        "email": "juan.perez@example.com",
-                        "phone": "+51987654321",
-                        "is_active": True,
-                        "created_at": "2025-10-07T10:30:00Z",
-                        "updated_at": "2025-10-07T10:30:00Z"
-                    }
-                }
-            }
-        },
-        404: {"description": "Client not found"},
-        401: {"description": "Not authenticated"}
-    }
-)
-def get_client_by_dni(
-    dni_number: str,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
-):
-    client = ClientService.get_client_by_dni(db, dni_number)
-    if not client:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Cliente no encontrado"
-        )
-    return client
 
 @router.get("/{client_id}", response_model=Client)
 def get_client(

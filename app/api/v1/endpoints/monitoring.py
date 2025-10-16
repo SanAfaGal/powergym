@@ -39,8 +39,9 @@ async def get_metrics():
         "api_version": settings.VERSION,
         "rate_limit_enabled": settings.RATE_LIMIT_ENABLED,
         "compression_enabled": settings.ENABLE_COMPRESSION,
-        "face_recognition_model": settings.FACE_RECOGNITION_MODEL,
-        "face_recognition_tolerance": settings.FACE_RECOGNITION_TOLERANCE
+        "face_recognition_model": "MediaPipe FaceMesh + FaceDetection",
+        "face_recognition_tolerance": settings.FACE_RECOGNITION_TOLERANCE,
+        "mediapipe_min_detection_confidence": settings.MEDIAPIPE_MIN_DETECTION_CONFIDENCE
     }
 
 @router.get("/ready")
