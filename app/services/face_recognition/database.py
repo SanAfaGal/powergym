@@ -63,7 +63,7 @@ class FaceDatabase:
                 db=db,
                 client_id=client_id,
                 biometric_type=BiometricTypeEnum.FACE,
-                thumbnail=thumbnail,
+                thumbnail=encrypted_thumbnail,
                 embedding_vector=embedding,
                 meta_info=meta_info
             )

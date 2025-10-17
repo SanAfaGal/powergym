@@ -2,8 +2,10 @@ from sqlalchemy.orm import Session
 from app.models.client import Client, ClientCreate, ClientUpdate, DocumentType, GenderType, BiometricSummary
 from app.repositories.client_repository import ClientRepository
 from app.db.models import DocumentTypeEnum, GenderTypeEnum, BiometricTypeEnum, ClientBiometricModel
+from app.core.encryption import get_encryption_service
 from uuid import UUID
 from typing import List, Optional
+import base64
 
 class ClientService:
     @staticmethod
@@ -11,6 +13,7 @@ class ClientService:
         """
         Extract facial biometric summary from client model.
         Returns the first active face biometric or None if not found.
+        Decrypts and converts thumbnail to base64 data URI for frontend use.
         """
         if not hasattr(client_model, 'biometrics') or not client_model.biometrics:
             return None
@@ -26,10 +29,20 @@ class ClientService:
         active_face = next((bio for bio in face_biometrics if bio.is_active), None)
         target_biometric = active_face if active_face else face_biometrics[0]
 
+        thumbnail_data_uri = None
+        if target_biometric.thumbnail:
+            try:
+                encryption_service = get_encryption_service()
+                decrypted_thumbnail = encryption_service.decrypt_image_data(target_biometric.thumbnail)
+                thumbnail_base64 = base64.b64encode(decrypted_thumbnail).decode('utf-8')
+                thumbnail_data_uri = f"data:image/jpeg;base64,{thumbnail_base64}"
+            except Exception as e:
+                thumbnail_data_uri = None
+
         return BiometricSummary(
             has_face_biometric=True,
             is_active=target_biometric.is_active,
-            thumbnail=target_biometric.thumbnail
+            thumbnail=thumbnail_data_uri
         )
 
     @staticmethod
