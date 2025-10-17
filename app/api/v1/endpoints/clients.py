@@ -145,14 +145,99 @@ def search_clients(
     clients = ClientService.search_clients(db=db, search_term=q, limit=limit)
     return clients
 
-
-@router.get("/{client_id}", response_model=Client)
-def get_client(
-    client_id: UUID,
+@router.get(
+    "/dni/{dni_number}",
+    response_model=Client,
+    summary="Get client by DNI",
+    description="Retrieve a specific client by their DNI number.",
+    responses={
+        200: {
+            "description": "Client found",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "id": "123e4567-e89b-12d3-a456-426614174000",
+                        "first_name": "Juan",
+                        "last_name": "Pérez",
+                        "dni_type": "DNI",
+                        "dni_number": "12345678",
+                        "email": "juan.perez@example.com",
+                        "phone": "+51987654321",
+                        "is_active": True,
+                        "created_at": "2025-10-07T10:30:00Z",
+                        "updated_at": "2025-10-07T10:30:00Z"
+                    }
+                }
+            }
+        },
+        404: {"description": "Client not found"},
+        401: {"description": "Not authenticated"}
+    }
+)
+def get_client_by_dni(
+    dni_number: str,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    client = ClientService.get_client_by_id(db, client_id)
+    client = ClientService.get_client_by_dni(db, dni_number)
+    if not client:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cliente no encontrado"
+        )
+    return client
+
+@router.get(
+    "/{client_id}",
+    response_model=Client,
+    summary="Get client by ID",
+    description="Retrieve a specific client by their ID with optional biometric information.",
+    responses={
+        200: {
+            "description": "Client found",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "id": "123e4567-e89b-12d3-a456-426614174000",
+                        "first_name": "Juan",
+                        "last_name": "Pérez",
+                        "dni_type": "CC",
+                        "dni_number": "12345678",
+                        "phone": "+573001234567",
+                        "birth_date": "1990-05-15",
+                        "gender": "male",
+                        "is_active": True,
+                        "created_at": "2025-10-07T10:30:00Z",
+                        "updated_at": "2025-10-07T10:30:00Z",
+                        "biometric": {
+                            "has_face_biometric": True,
+                            "is_active": True,
+                            "thumbnail": "data:image/jpeg;base64,/9j/4AAQSkZJRg..."
+                        }
+                    }
+                }
+            }
+        },
+        404: {"description": "Client not found"},
+        401: {"description": "Not authenticated"}
+    }
+)
+def get_client(
+    client_id: UUID,
+    include_biometrics: bool = Query(
+        default=True,
+        description="Include facial biometric information in the response"
+    ),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get a specific client by their ID.
+
+    - **client_id**: UUID of the client to retrieve
+    - **include_biometrics**: If true, includes facial biometric data (thumbnail, active status)
+    """
+    client = ClientService.get_client_by_id(db, client_id, include_biometrics=include_biometrics)
     if not client:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

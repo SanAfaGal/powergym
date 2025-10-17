@@ -1,7 +1,7 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
-from app.db.models import ClientModel, DocumentTypeEnum, GenderTypeEnum
+from app.db.models import ClientModel, DocumentTypeEnum, GenderTypeEnum, ClientBiometricModel
 from typing import Optional, List
 from uuid import UUID
 from datetime import date
@@ -40,6 +40,16 @@ class ClientRepository:
         Get client by ID.
         """
         return db.query(ClientModel).filter(ClientModel.id == client_id).first()
+
+    @staticmethod
+    def get_by_id_with_biometrics(db: Session, client_id: UUID) -> Optional[ClientModel]:
+        """
+        Get client by ID with eager loading of biometric data.
+        """
+        return db.query(ClientModel)\
+            .options(joinedload(ClientModel.biometrics))\
+            .filter(ClientModel.id == client_id)\
+            .first()
 
     @staticmethod
     def get_by_dni(db: Session, dni_number: str) -> Optional[ClientModel]:

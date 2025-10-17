@@ -1,11 +1,37 @@
 from sqlalchemy.orm import Session
-from app.models.client import Client, ClientCreate, ClientUpdate, DocumentType, GenderType
+from app.models.client import Client, ClientCreate, ClientUpdate, DocumentType, GenderType, BiometricSummary
 from app.repositories.client_repository import ClientRepository
-from app.db.models import DocumentTypeEnum, GenderTypeEnum
+from app.db.models import DocumentTypeEnum, GenderTypeEnum, BiometricTypeEnum, ClientBiometricModel
 from uuid import UUID
-from typing import List
+from typing import List, Optional
 
 class ClientService:
+    @staticmethod
+    def _get_face_biometric_summary(client_model) -> Optional[BiometricSummary]:
+        """
+        Extract facial biometric summary from client model.
+        Returns the first active face biometric or None if not found.
+        """
+        if not hasattr(client_model, 'biometrics') or not client_model.biometrics:
+            return None
+
+        face_biometrics = [
+            bio for bio in client_model.biometrics
+            if bio.type == BiometricTypeEnum.FACE
+        ]
+
+        if not face_biometrics:
+            return None
+
+        active_face = next((bio for bio in face_biometrics if bio.is_active), None)
+        target_biometric = active_face if active_face else face_biometrics[0]
+
+        return BiometricSummary(
+            has_face_biometric=True,
+            is_active=target_biometric.is_active,
+            thumbnail=target_biometric.thumbnail
+        )
+
     @staticmethod
     def create_client(db: Session, client_data: ClientCreate) -> Client | None:
         dni_type_enum = DocumentTypeEnum[client_data.dni_type.value]
@@ -46,10 +72,28 @@ class ClientService:
         )
 
     @staticmethod
-    def get_client_by_id(db: Session, client_id: UUID) -> Client | None:
-        client_model = ClientRepository.get_by_id(db, client_id)
+    def get_client_by_id(db: Session, client_id: UUID, include_biometrics: bool = False) -> Client | None:
+        """
+        Get client by ID with optional biometric information.
+
+        Args:
+            db: Database session
+            client_id: Client UUID
+            include_biometrics: Whether to include biometric summary in response
+
+        Returns:
+            Client model with optional biometric data or None if not found
+        """
+        if include_biometrics:
+            client_model = ClientRepository.get_by_id_with_biometrics(db, client_id)
+        else:
+            client_model = ClientRepository.get_by_id(db, client_id)
 
         if client_model:
+            biometric_summary = None
+            if include_biometrics:
+                biometric_summary = ClientService._get_face_biometric_summary(client_model)
+
             return Client(
                 id=client_model.id,
                 dni_type=DocumentType(client_model.dni_type.value),
@@ -66,7 +110,8 @@ class ClientService:
                 is_active=client_model.is_active,
                 created_at=client_model.created_at.isoformat(),
                 updated_at=client_model.updated_at.isoformat(),
-                meta_info=client_model.meta_info
+                meta_info=client_model.meta_info,
+                biometric=biometric_summary
             )
         return None
 
