@@ -1,5 +1,10 @@
 from sqlalchemy.orm import Session
-from app.models.client import Client, ClientCreate, ClientUpdate, DocumentType, GenderType, BiometricSummary
+from app.models.client import (
+    Client, ClientCreate, ClientUpdate, DocumentType, GenderType
+)
+from app.models.client_dashboard import (
+    ClientDashboard, BiometricInfo, SubscriptionInfo, ClientStats
+)
 from app.repositories.client_repository import ClientRepository
 from app.db.models import DocumentTypeEnum, GenderTypeEnum, BiometricTypeEnum, ClientBiometricModel
 from app.core.encryption import get_encryption_service
@@ -8,42 +13,6 @@ from typing import List, Optional
 import base64
 
 class ClientService:
-    @staticmethod
-    def _get_face_biometric_summary(client_model) -> Optional[BiometricSummary]:
-        """
-        Extract facial biometric summary from client model.
-        Returns the first active face biometric or None if not found.
-        Decrypts and converts thumbnail to base64 data URI for frontend use.
-        """
-        if not hasattr(client_model, 'biometrics') or not client_model.biometrics:
-            return None
-
-        face_biometrics = [
-            bio for bio in client_model.biometrics
-            if bio.type == BiometricTypeEnum.FACE
-        ]
-
-        if not face_biometrics:
-            return None
-
-        active_face = next((bio for bio in face_biometrics if bio.is_active), None)
-        target_biometric = active_face if active_face else face_biometrics[0]
-
-        thumbnail_data_uri = None
-        if target_biometric.thumbnail:
-            try:
-                encryption_service = get_encryption_service()
-                decrypted_thumbnail = encryption_service.decrypt_image_data(target_biometric.thumbnail)
-                thumbnail_base64 = base64.b64encode(decrypted_thumbnail).decode('utf-8')
-                thumbnail_data_uri = f"data:image/jpeg;base64,{thumbnail_base64}"
-            except Exception as e:
-                thumbnail_data_uri = None
-
-        return BiometricSummary(
-            has_face_biometric=True,
-            is_active=target_biometric.is_active,
-            thumbnail=thumbnail_data_uri
-        )
 
     @staticmethod
     def create_client(db: Session, client_data: ClientCreate) -> Client | None:
@@ -103,9 +72,6 @@ class ClientService:
             client_model = ClientRepository.get_by_id(db, client_id)
 
         if client_model:
-            biometric_summary = None
-            if include_biometrics:
-                biometric_summary = ClientService._get_face_biometric_summary(client_model)
 
             return Client(
                 id=client_model.id,
@@ -124,32 +90,6 @@ class ClientService:
                 created_at=client_model.created_at.isoformat(),
                 updated_at=client_model.updated_at.isoformat(),
                 meta_info=client_model.meta_info,
-                biometric=biometric_summary
-            )
-        return None
-
-    @staticmethod
-    def get_client_by_dni(db: Session, dni_number: str) -> Client | None:
-        client_model = ClientRepository.get_by_dni(db, dni_number)
-
-        if client_model:
-            return Client(
-                id=client_model.id,
-                dni_type=DocumentType(client_model.dni_type.value),
-                dni_number=client_model.dni_number,
-                first_name=client_model.first_name,
-                middle_name=client_model.middle_name,
-                last_name=client_model.last_name,
-                second_last_name=client_model.second_last_name,
-                phone=client_model.phone,
-                alternative_phone=client_model.alternative_phone,
-                birth_date=client_model.birth_date,
-                gender=GenderType(client_model.gender.value),
-                address=client_model.address,
-                is_active=client_model.is_active,
-                created_at=client_model.created_at.isoformat(),
-                updated_at=client_model.updated_at.isoformat(),
-                meta_info=client_model.meta_info
             )
         return None
 
@@ -267,3 +207,100 @@ class ClientService:
             )
             for client in client_models
         ]
+
+    @staticmethod
+    def get_client_dashboard(db: Session, client_id: UUID) -> Optional[ClientDashboard]:
+        """
+        Get comprehensive client dashboard data.
+        """
+        dashboard_data = ClientRepository.get_client_dashboard_data(db, client_id)
+
+        if not dashboard_data:
+            return None
+
+        client_model = dashboard_data["client"]
+        latest_subscription = dashboard_data["latest_subscription"]
+        total_subscriptions = dashboard_data["total_subscriptions"]
+        last_attendance = dashboard_data["last_attendance"]
+        attendance_count = dashboard_data["attendance_count"]
+
+        client = Client(
+            id=client_model.id,
+            dni_type=DocumentType(client_model.dni_type.value),
+            dni_number=client_model.dni_number,
+            first_name=client_model.first_name,
+            middle_name=client_model.middle_name,
+            last_name=client_model.last_name,
+            second_last_name=client_model.second_last_name,
+            phone=client_model.phone,
+            alternative_phone=client_model.alternative_phone,
+            birth_date=client_model.birth_date,
+            gender=GenderType(client_model.gender.value),
+            address=client_model.address,
+            is_active=client_model.is_active,
+            created_at=client_model.created_at.isoformat(),
+            updated_at=client_model.updated_at.isoformat(),
+            meta_info=client_model.meta_info
+        )
+
+        biometric_type = None
+        thumbnail_data_uri = None
+        biometric_updated_at = None
+
+        if hasattr(client_model, 'biometrics') and client_model.biometrics:
+            face_biometrics = [
+                bio for bio in client_model.biometrics
+                if bio.type == BiometricTypeEnum.FACE
+            ]
+
+            if face_biometrics:
+                active_face = next((bio for bio in face_biometrics if bio.is_active), None)
+                target_biometric = active_face if active_face else face_biometrics[0]
+
+                biometric_type = target_biometric.type.value
+                biometric_updated_at = target_biometric.updated_at.isoformat()
+
+                if target_biometric.thumbnail:
+                    try:
+                        encryption_service = get_encryption_service()
+                        decrypted_thumbnail = encryption_service.decrypt_image_data(target_biometric.thumbnail)
+                        thumbnail_base64 = base64.b64encode(decrypted_thumbnail).decode('utf-8')
+                        thumbnail_data_uri = f"data:image/jpeg;base64,{thumbnail_base64}"
+                    except Exception:
+                        pass
+
+        biometric = BiometricInfo(
+            type=biometric_type,
+            thumbnail=thumbnail_data_uri,
+            updated_at=biometric_updated_at or client_model.updated_at.isoformat()
+        )
+
+        subscription_status = None
+        subscription_plan = None
+        subscription_end_date = None
+
+        if latest_subscription:
+            subscription_status = latest_subscription.status.value.replace("_", " ").title()
+            if hasattr(latest_subscription, 'plan') and latest_subscription.plan:
+                subscription_plan = latest_subscription.plan.name
+            subscription_end_date = latest_subscription.end_date.isoformat()
+
+        subscription = SubscriptionInfo(
+            status=subscription_status,
+            plan=subscription_plan,
+            end_date=subscription_end_date
+        )
+
+        stats = ClientStats(
+            subscriptions=total_subscriptions,
+            attendances = attendance_count,
+            last_attendance=last_attendance.check_in.isoformat() if last_attendance else None,
+            since=client_model.created_at.isoformat()
+        )
+
+        return ClientDashboard(
+            client=client,
+            biometric=biometric,
+            subscription=subscription,
+            stats=stats
+        )

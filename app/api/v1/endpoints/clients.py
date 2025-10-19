@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from app.models.client import Client, ClientCreate, ClientUpdate
+from app.models.client_dashboard import ClientDashboard
 from app.services.client_service import ClientService
 from app.api.dependencies import get_current_active_user
 from app.models.user import User
@@ -297,3 +298,132 @@ def delete_client(
         )
 
     return None
+
+@router.get(
+    "/{client_id}/dashboard",
+    response_model=ClientDashboard,
+    summary="Get client dashboard",
+    description="Retrieve complete dashboard information for a client including biometrics, subscription, and statistics.",
+    responses={
+        200: {
+            "description": "Client dashboard information",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "client": {
+                            "id": "123e4567-e89b-12d3-a456-426614174000",
+                            "first_name": "Juan",
+                            "last_name": "Pérez",
+                            "dni_type": "DNI",
+                            "dni_number": "12345678",
+                            "phone": "+51987654321",
+                            "is_active": True,
+                            "created_at": "2025-10-07T10:30:00Z",
+                            "updated_at": "2025-10-07T10:30:00Z"
+                        },
+                        "biometric": {
+                            "type": "FACE",
+                            "thumbnail": "data:image/jpeg;base64,/9j/4AAQSkZJRg...",
+                            "updated_at": "2025-10-07T10:30:00Z"
+                        },
+                        "subscription": {
+                            "status": "active",
+                            "plan": "Premium Monthly",
+                            "end_date": "2025-11-07"
+                        },
+                        "stats": {
+                            "subscriptions": 3,
+                            "last_attendance": "2025-10-18T18:45:00Z",
+                            "since": "2025-10-07T10:30:00Z"
+                        }
+                    }
+                }
+            }
+        },
+        404: {"description": "Client not found"},
+        401: {"description": "Not authenticated"}
+    }
+)
+def get_client_dashboard(
+    client_id: UUID,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get complete dashboard information for a specific client.
+
+    Returns:
+    - **client**: Basic client information
+    - **biometric**: Latest facial biometric data with thumbnail
+    - **subscription**: Current subscription status and plan
+    - **stats**: Statistics including total subscriptions, attendance count, and account age
+    """
+    dashboard = ClientService.get_client_dashboard(db, client_id)
+    if not dashboard:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cliente no encontrado"
+        )
+    return dashboard
+
+@router.get(
+    "/{client_id}/dashboard",
+    response_model=ClientDashboard,
+    summary="Get client dashboard",
+    description="Retrieve comprehensive dashboard information for a specific client.",
+    responses={
+        200: {
+            "description": "Client dashboard data",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "client": {
+                            "id": "123e4567-e89b-12d3-a456-426614174000",
+                            "first_name": "Juan",
+                            "last_name": "Pérez",
+                            "dni_type": "DNI",
+                            "dni_number": "12345678",
+                            "phone": "+51987654321",
+                            "is_active": True,
+                            "created_at": "2025-10-07T10:30:00Z",
+                            "updated_at": "2025-10-07T10:30:00Z"
+                        },
+                        "biometric": {
+                            "type": "FACE",
+                            "thumbnail": "data:image/jpeg;base64,...",
+                            "updated_at": "2025-10-07T10:30:00Z"
+                        },
+                        "subscription": {
+                            "status": "Active",
+                            "plan": "Plan Mensual",
+                            "end_date": "2025-11-07"
+                        },
+                        "stats": {
+                            "subscriptions": 3,
+                            "last_attendance": "2025-10-15T08:30:00Z",
+                            "since": "2025-01-15T10:00:00Z"
+                        }
+                    }
+                }
+            }
+        },
+        404: {"description": "Client not found"},
+        401: {"description": "Not authenticated"}
+    }
+)
+def get_client_dashboard(
+    client_id: UUID,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get comprehensive dashboard information for a specific client.
+    Includes client details, biometric info, latest subscription, and statistics.
+    """
+    dashboard = ClientService.get_client_dashboard(db, client_id)
+    if not dashboard:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cliente no encontrado"
+        )
+    return dashboard

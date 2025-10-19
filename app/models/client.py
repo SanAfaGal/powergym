@@ -2,7 +2,6 @@ from pydantic import BaseModel, field_validator
 from enum import Enum
 from datetime import date
 from uuid import UUID
-from typing import Optional
 
 class DocumentType(str, Enum):
     CC = "CC"
@@ -14,17 +13,6 @@ class GenderType(str, Enum):
     M = "male"
     F = "female"
     O = "other"
-
-class BiometricSummary(BaseModel):
-    """
-    Summary of client's facial biometric information.
-    """
-    has_face_biometric: bool
-    is_active: bool
-    thumbnail: Optional[str] = None
-
-    class Config:
-        from_attributes = True
 
 class ClientBase(BaseModel):
     dni_type: DocumentType
@@ -106,7 +94,6 @@ class Client(ClientBase):
     created_at: str
     updated_at: str
     meta_info: dict = {}
-    biometric: Optional[BiometricSummary] = None
 
     class Config:
         from_attributes = True

@@ -1,10 +1,16 @@
-from sqlalchemy.orm import Session, joinedload
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_
-from app.db.models import ClientModel, DocumentTypeEnum, GenderTypeEnum, ClientBiometricModel
-from typing import Optional, List
-from uuid import UUID
 from datetime import date
+from typing import Optional, Any, Sequence
+from uuid import UUID
+
+from sqlalchemy import select, or_, func, Row, RowMapping
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session, joinedload
+
+from app.db.models import (
+    ClientModel, DocumentTypeEnum, GenderTypeEnum,
+    SubscriptionModel, AttendanceModel
+)
+
 
 class ClientRepository:
     @staticmethod
@@ -60,7 +66,7 @@ class ClientRepository:
 
     @staticmethod
     def get_all(db: Session, is_active: Optional[bool] = None, limit: int = 100,
-                offset: int = 0) -> List[ClientModel]:
+                offset: int = 0) -> list[type[ClientModel]]:
         """
         Get all clients with optional filtering.
         """
@@ -73,7 +79,7 @@ class ClientRepository:
         return query.all()
 
     @staticmethod
-    def search(db: Session, search_term: str, limit: int = 50) -> List[ClientModel]:
+    def search(db: Session, search_term: str, limit: int = 50) -> list[type[ClientModel]]:
         """
         Search clients by name, DNI, or phone.
         """
@@ -163,7 +169,7 @@ class ClientRepository:
 
     @staticmethod
     async def get_all_async(db: AsyncSession, is_active: Optional[bool] = None,
-                           limit: int = 100, offset: int = 0) -> List[ClientModel]:
+                           limit: int = 100, offset: int = 0) -> Sequence[Row[Any] | RowMapping | Any]:
         """
         Get all clients with optional filtering (async).
         """
@@ -177,7 +183,7 @@ class ClientRepository:
         return result.scalars().all()
 
     @staticmethod
-    async def search_async(db: AsyncSession, search_term: str, limit: int = 50) -> List[ClientModel]:
+    async def search_async(db: AsyncSession, search_term: str, limit: int = 50) -> Sequence[ClientModel]:
         """
         Search clients by name, DNI, or phone (async).
         """
@@ -226,3 +232,49 @@ class ClientRepository:
         client.is_active = False
         await db.commit()
         return True
+
+    @staticmethod
+    def get_client_dashboard_data(db: Session, client_id: UUID) -> Optional[dict]:
+        """
+        Get comprehensive client dashboard data including client info, biometric,
+        latest subscription, and statistics.
+        """
+        client = db.query(ClientModel)\
+            .options(joinedload(ClientModel.biometrics))\
+            .filter(ClientModel.id == client_id)\
+            .first()
+
+        if not client:
+            return None
+
+        latest_subscription = db.query(SubscriptionModel)\
+            .options(joinedload(SubscriptionModel.plan))\
+            .filter(SubscriptionModel.client_id == client_id)\
+            .order_by(SubscriptionModel.created_at.desc())\
+            .first()
+
+        total_subscriptions = db.query(func.count(SubscriptionModel.id))\
+            .filter(SubscriptionModel.client_id == client_id)\
+            .scalar() or 0
+
+        last_attendance = db.query(AttendanceModel)\
+            .filter(AttendanceModel.client_id == client_id)\
+            .order_by(AttendanceModel.check_in.desc())\
+            .first()
+
+        attendance_count = 0
+        if latest_subscription:
+            attendance_count = db.query(func.count(AttendanceModel.id))\
+                .filter(
+                    AttendanceModel.client_id == client_id,
+                    AttendanceModel.check_in >= latest_subscription.start_date
+                )\
+                .scalar() or 0
+
+        return {
+            "client": client,
+            "latest_subscription": latest_subscription,
+            "total_subscriptions": total_subscriptions,
+            "last_attendance": last_attendance,
+            "attendance_count": attendance_count
+        }
