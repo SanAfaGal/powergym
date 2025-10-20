@@ -101,7 +101,7 @@ def upgrade() -> None:
     sa.Column('plan_id', sa.UUID(), nullable=False),
     sa.Column('start_date', sa.Date(), nullable=False),
     sa.Column('end_date', sa.Date(), nullable=False),
-    sa.Column('status', postgresql.ENUM('ACTIVE', 'EXPIRED', 'PENDING_PAYMENT', 'CANCELED', name='subscription_status'), nullable=False),
+    sa.Column('status', postgresql.ENUM('ACTIVE', 'EXPIRED', 'PENDING_PAYMENT', 'CANCELED', 'SCHEDULED', name='subscription_status'), nullable=False),
     sa.Column('cancellation_date', sa.Date(), nullable=True),
     sa.Column('cancellation_reason', sa.Text(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
