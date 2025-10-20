@@ -36,6 +36,7 @@ logs/*
 # ─── Configuración de IDEs ─────────────
 .vscode/
 .idea/
+.idea/*
 *.code-workspace
 
 # ─── Tests ─────────────────────────────
