@@ -36,6 +36,7 @@ class SubscriptionStatusEnum(str, Enum):
     ACTIVE = "active"
     EXPIRED = "expired"
     PENDING_PAYMENT = "pending_payment"
+    SCHEDULED = "scheduled"
     CANCELED = "canceled"
 
 class PaymentMethodEnum(str, Enum):
@@ -145,7 +146,7 @@ class SubscriptionModel(Base):
     payments = relationship("PaymentModel", back_populates="subscription", cascade="all, delete-orphan")
 
     __table_args__ = (
-        CheckConstraint("end_date > start_date", name="subscriptions_dates_check"),
+        CheckConstraint("end_date >= start_date", name="subscriptions_dates_check"),
     )
 
 class PaymentModel(Base):

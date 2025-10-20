@@ -1,292 +1,404 @@
+# app/repositories/subscription_repository.py
+
 from sqlalchemy.orm import Session
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
-from app.db.models import SubscriptionModel, SubscriptionStatusEnum
-from typing import Optional, List
+from sqlalchemy import and_, desc
 from uuid import UUID
 from datetime import date
-from decimal import Decimal
+from typing import List, Optional
+from app.db.models import SubscriptionModel, SubscriptionStatusEnum
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class SubscriptionRepository:
+    """Data access layer for subscriptions"""
+
     @staticmethod
-    def create(db: Session, client_id: UUID, plan_id: UUID, start_date: date,
-               end_date: date, status: SubscriptionStatusEnum = SubscriptionStatusEnum.PENDING_PAYMENT,
-               meta_info: dict = None) -> SubscriptionModel:
+    def create(
+            db: Session,
+            client_id: UUID,
+            plan_id: UUID,
+            start_date: date,
+            end_date: date,
+            status: SubscriptionStatusEnum = SubscriptionStatusEnum.PENDING_PAYMENT
+    ) -> SubscriptionModel:
         """
-        Create a new subscription in the database.
+        Create a new subscription.
+
+        Args:
+            db: Database session
+            client_id: Client UUID
+            plan_id: Plan UUID
+            start_date: Subscription start date
+            end_date: Subscription end date
+            status: Initial status (default: PENDING_PAYMENT)
+
+        Returns:
+            SubscriptionModel: Created subscription
         """
-        db_subscription = SubscriptionModel(
-            client_id=client_id,
-            plan_id=plan_id,
-            start_date=start_date,
-            end_date=end_date,
-            status=status,
-            meta_info=meta_info or {}
-        )
-        db.add(db_subscription)
-        db.commit()
-        db.refresh(db_subscription)
-        return db_subscription
+        try:
+            subscription = SubscriptionModel(
+                client_id=client_id,
+                plan_id=plan_id,
+                start_date=start_date,
+                end_date=end_date,
+                status=status
+            )
+            db.add(subscription)
+            db.commit()
+            db.refresh(subscription)
+
+            logger.info(f"Subscription created: {subscription.id} for client {client_id}")
+            return subscription
+
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error creating subscription: {str(e)}")
+            raise
 
     @staticmethod
     def get_by_id(db: Session, subscription_id: UUID) -> Optional[SubscriptionModel]:
         """
         Get subscription by ID.
-        """
-        return db.query(SubscriptionModel).filter(SubscriptionModel.id == subscription_id).first()
 
-    @staticmethod
-    def get_by_client(db: Session, client_id: UUID, limit: int = 100,
-                      offset: int = 0) -> List[SubscriptionModel]:
-        """
-        Get all subscriptions for a specific client.
+        Args:
+            db: Database session
+            subscription_id: Subscription UUID
+
+        Returns:
+            SubscriptionModel or None
         """
         return db.query(SubscriptionModel).filter(
-            SubscriptionModel.client_id == client_id
-        ).order_by(SubscriptionModel.created_at.desc()).offset(offset).limit(limit).all()
-
-    @staticmethod
-    def get_by_plan(db: Session, plan_id: UUID, limit: int = 100,
-                    offset: int = 0) -> List[SubscriptionModel]:
-        """
-        Get all subscriptions for a specific plan.
-        """
-        return db.query(SubscriptionModel).filter(
-            SubscriptionModel.plan_id == plan_id
-        ).order_by(SubscriptionModel.created_at.desc()).offset(offset).limit(limit).all()
-
-    @staticmethod
-    def get_by_status(db: Session, status: SubscriptionStatusEnum, limit: int = 100,
-                      offset: int = 0) -> List[SubscriptionModel]:
-        """
-        Get all subscriptions with a specific status.
-        """
-        return db.query(SubscriptionModel).filter(
-            SubscriptionModel.status == status
-        ).order_by(SubscriptionModel.created_at.desc()).offset(offset).limit(limit).all()
+            SubscriptionModel.id == subscription_id
+        ).first()
 
     @staticmethod
     def get_active_by_client(db: Session, client_id: UUID) -> List[SubscriptionModel]:
         """
-        Get all active subscriptions for a specific client.
+        Get active subscriptions for a client.
+
+        Active means status is ACTIVE or PENDING_PAYMENT.
+        Only one should exist at a time (enforced by business logic).
+
+        Args:
+            db: Database session
+            client_id: Client UUID
+
+        Returns:
+            List[SubscriptionModel]: List of active subscriptions (should be max 1)
         """
         return db.query(SubscriptionModel).filter(
             and_(
                 SubscriptionModel.client_id == client_id,
-                SubscriptionModel.status == SubscriptionStatusEnum.ACTIVE
+                SubscriptionModel.status.in_([
+                    SubscriptionStatusEnum.ACTIVE,
+                    SubscriptionStatusEnum.PENDING_PAYMENT
+                ])
             )
-        ).all()
+        ).order_by(desc(SubscriptionModel.created_at)).all()
 
     @staticmethod
-    def get_all(db: Session, limit: int = 100, offset: int = 0) -> List[SubscriptionModel]:
+    def get_scheduled_by_client(db: Session, client_id: UUID) -> Optional[SubscriptionModel]:
         """
-        Get all subscriptions.
-        """
-        return db.query(SubscriptionModel).order_by(
-            SubscriptionModel.created_at.desc()
-        ).offset(offset).limit(limit).all()
+        Get the next scheduled/pending renewal for a client.
 
-    @staticmethod
-    def update(db: Session, subscription_id: UUID, **kwargs) -> Optional[SubscriptionModel]:
+        Returns the SCHEDULED or PENDING_PAYMENT subscription that represents
+        a future renewal (not the current active one).
+
+        This is used to prevent duplicate renewals.
+
+        Args:
+            db: Database session
+            client_id: Client UUID
+
+        Returns:
+            SubscriptionModel or None: The pending renewal subscription
         """
-        Update subscription by ID.
-        """
-        subscription = db.query(SubscriptionModel).filter(
-            SubscriptionModel.id == subscription_id
-        ).first()
-        if not subscription:
+        # Get all SCHEDULED and PENDING_PAYMENT subscriptions
+        pending = db.query(SubscriptionModel).filter(
+            and_(
+                SubscriptionModel.client_id == client_id,
+                SubscriptionModel.status.in_([
+                    SubscriptionStatusEnum.SCHEDULED,
+                    SubscriptionStatusEnum.PENDING_PAYMENT
+                ])
+            )
+        ).order_by(desc(SubscriptionModel.start_date)).all()
+
+        if not pending:
             return None
 
-        for key, value in kwargs.items():
-            if value is not None and hasattr(subscription, key):
-                setattr(subscription, key, value)
-
-        db.commit()
-        db.refresh(subscription)
-        return subscription
-
-    @staticmethod
-    def cancel(db: Session, subscription_id: UUID, cancellation_reason: Optional[str] = None) -> Optional[SubscriptionModel]:
-        """
-        Cancel a subscription.
-        """
-        subscription = db.query(SubscriptionModel).filter(
-            SubscriptionModel.id == subscription_id
-        ).first()
-        if not subscription:
-            return None
-
-        subscription.status = SubscriptionStatusEnum.CANCELED
-        subscription.cancellation_date = date.today()
-        if cancellation_reason:
-            subscription.cancellation_reason = cancellation_reason
-
-        db.commit()
-        db.refresh(subscription)
-        return subscription
-
-    @staticmethod
-    def delete(db: Session, subscription_id: UUID) -> bool:
-        """
-        Hard delete subscription (use with caution).
-        """
-        subscription = db.query(SubscriptionModel).filter(
-            SubscriptionModel.id == subscription_id
-        ).first()
-        if not subscription:
-            return False
-
-        db.delete(subscription)
-        db.commit()
-        return True
-
-    @staticmethod
-    async def create_async(db: AsyncSession, client_id: UUID, plan_id: UUID,
-                          start_date: date, end_date: date,
-                          status: SubscriptionStatusEnum = SubscriptionStatusEnum.PENDING_PAYMENT) -> SubscriptionModel:
-        """
-        Create a new subscription in the database (async).
-        """
-        db_subscription = SubscriptionModel(
-            client_id=client_id,
-            plan_id=plan_id,
-            start_date=start_date,
-            end_date=end_date,
-            status=status
-        )
-        db.add(db_subscription)
-        await db.commit()
-        await db.refresh(db_subscription)
-        return db_subscription
-
-    @staticmethod
-    async def get_by_id_async(db: AsyncSession, subscription_id: UUID) -> Optional[SubscriptionModel]:
-        """
-        Get subscription by ID (async).
-        """
-        result = await db.execute(select(SubscriptionModel).filter(
-            SubscriptionModel.id == subscription_id
-        ))
-        return result.scalar_one_or_none()
-
-    @staticmethod
-    async def get_by_client_async(db: AsyncSession, client_id: UUID, limit: int = 100,
-                                  offset: int = 0) -> List[SubscriptionModel]:
-        """
-        Get all subscriptions for a specific client (async).
-        """
-        query = select(SubscriptionModel).filter(
-            SubscriptionModel.client_id == client_id
-        ).order_by(SubscriptionModel.created_at.desc()).offset(offset).limit(limit)
-        result = await db.execute(query)
-        return result.scalars().all()
-
-    @staticmethod
-    async def get_by_plan_async(db: AsyncSession, plan_id: UUID, limit: int = 100,
-                                offset: int = 0) -> List[SubscriptionModel]:
-        """
-        Get all subscriptions for a specific plan (async).
-        """
-        query = select(SubscriptionModel).filter(
-            SubscriptionModel.plan_id == plan_id
-        ).order_by(SubscriptionModel.created_at.desc()).offset(offset).limit(limit)
-        result = await db.execute(query)
-        return result.scalars().all()
-
-    @staticmethod
-    async def get_by_status_async(db: AsyncSession, status: SubscriptionStatusEnum,
-                                  limit: int = 100, offset: int = 0) -> List[SubscriptionModel]:
-        """
-        Get all subscriptions with a specific status (async).
-        """
-        query = select(SubscriptionModel).filter(
-            SubscriptionModel.status == status
-        ).order_by(SubscriptionModel.created_at.desc()).offset(offset).limit(limit)
-        result = await db.execute(query)
-        return result.scalars().all()
-
-    @staticmethod
-    async def get_active_by_client_async(db: AsyncSession, client_id: UUID) -> List[SubscriptionModel]:
-        """
-        Get all active subscriptions for a specific client (async).
-        """
-        query = select(SubscriptionModel).filter(
+        # Get the current active subscription (if any)
+        active = db.query(SubscriptionModel).filter(
             and_(
                 SubscriptionModel.client_id == client_id,
                 SubscriptionModel.status == SubscriptionStatusEnum.ACTIVE
             )
-        )
-        result = await db.execute(query)
-        return result.scalars().all()
+        ).first()
+
+        if not active:
+            # No active subscription, return the first pending
+            return pending[0]
+
+        # Return pending subscriptions that start AFTER the active one ends
+        for sub in pending:
+            if sub.start_date > active.end_date:
+                return sub
+
+        # If no renewal found after active, return the oldest pending
+        return pending[-1] if pending else None
 
     @staticmethod
-    async def get_all_async(db: AsyncSession, limit: int = 100, offset: int = 0) -> List[SubscriptionModel]:
+    def get_by_client(
+            db: Session,
+            client_id: UUID,
+            limit: int = 100,
+            offset: int = 0
+    ) -> List[SubscriptionModel]:
         """
-        Get all subscriptions (async).
+        Get all subscriptions for a client with pagination.
+
+        Args:
+            db: Database session
+            client_id: Client UUID
+            limit: Maximum number of results
+            offset: Number of results to skip
+
+        Returns:
+            List[SubscriptionModel]: List of subscriptions
         """
-        query = select(SubscriptionModel).order_by(
-            SubscriptionModel.created_at.desc()
-        ).offset(offset).limit(limit)
-        result = await db.execute(query)
-        return result.scalars().all()
+        return db.query(SubscriptionModel).filter(
+            SubscriptionModel.client_id == client_id
+        ).order_by(
+            desc(SubscriptionModel.created_at)
+        ).limit(limit).offset(offset).all()
 
     @staticmethod
-    async def update_async(db: AsyncSession, subscription_id: UUID, **kwargs) -> Optional[SubscriptionModel]:
+    def get_by_status(
+            db: Session,
+            status: SubscriptionStatusEnum,
+            limit: int = 100,
+            offset: int = 0
+    ) -> List[SubscriptionModel]:
         """
-        Update subscription by ID (async).
+        Get all subscriptions with a specific status.
+
+        Args:
+            db: Database session
+            status: SubscriptionStatusEnum
+            limit: Maximum number of results
+            offset: Number of results to skip
+
+        Returns:
+            List[SubscriptionModel]: List of subscriptions
         """
-        result = await db.execute(select(SubscriptionModel).filter(
-            SubscriptionModel.id == subscription_id
-        ))
-        subscription = result.scalar_one_or_none()
-
-        if not subscription:
-            return None
-
-        for key, value in kwargs.items():
-            if value is not None and hasattr(subscription, key):
-                setattr(subscription, key, value)
-
-        await db.commit()
-        await db.refresh(subscription)
-        return subscription
+        return db.query(SubscriptionModel).filter(
+            SubscriptionModel.status == status
+        ).order_by(
+            desc(SubscriptionModel.created_at)
+        ).limit(limit).offset(offset).all()
 
     @staticmethod
-    async def cancel_async(db: AsyncSession, subscription_id: UUID,
-                          cancellation_reason: Optional[str] = None) -> Optional[SubscriptionModel]:
+    def update(
+            db: Session,
+            subscription_id: UUID,
+            **kwargs
+    ) -> Optional[SubscriptionModel]:
         """
-        Cancel a subscription (async).
+        Update subscription fields.
+
+        Args:
+            db: Database session
+            subscription_id: Subscription UUID
+            **kwargs: Fields to update (e.g., status=..., end_date=...)
+
+        Returns:
+            SubscriptionModel or None if not found
         """
-        result = await db.execute(select(SubscriptionModel).filter(
-            SubscriptionModel.id == subscription_id
-        ))
-        subscription = result.scalar_one_or_none()
+        try:
+            subscription = SubscriptionRepository.get_by_id(db, subscription_id)
+            if not subscription:
+                return None
 
-        if not subscription:
-            return None
+            for key, value in kwargs.items():
+                if hasattr(subscription, key):
+                    setattr(subscription, key, value)
 
-        subscription.status = SubscriptionStatusEnum.CANCELED
-        subscription.cancellation_date = date.today()
-        if cancellation_reason:
+            db.commit()
+            db.refresh(subscription)
+
+            logger.info(f"Subscription updated: {subscription_id}")
+            return subscription
+
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error updating subscription {subscription_id}: {str(e)}")
+            raise
+
+    @staticmethod
+    def cancel(
+            db: Session,
+            subscription_id: UUID,
+            cancellation_reason: Optional[str] = None
+    ) -> Optional[SubscriptionModel]:
+        """
+        Cancel a subscription.
+
+        Args:
+            db: Database session
+            subscription_id: Subscription UUID
+            cancellation_reason: Optional reason for cancellation
+
+        Returns:
+            SubscriptionModel or None if not found
+        """
+        try:
+            subscription = SubscriptionRepository.get_by_id(db, subscription_id)
+            if not subscription:
+                return None
+
+            subscription.status = SubscriptionStatusEnum.CANCELED
+            subscription.cancellation_date = date.today()
             subscription.cancellation_reason = cancellation_reason
 
-        await db.commit()
-        await db.refresh(subscription)
-        return subscription
+            db.commit()
+            db.refresh(subscription)
+
+            logger.info(f"Subscription canceled: {subscription_id}")
+            return subscription
+
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error canceling subscription {subscription_id}: {str(e)}")
+            raise
 
     @staticmethod
-    async def delete_async(db: AsyncSession, subscription_id: UUID) -> bool:
+    def delete(db: Session, subscription_id: UUID) -> bool:
         """
-        Hard delete subscription (async, use with caution).
+        Hard delete a subscription (permanent removal).
+
+        Use with caution - this is permanent deletion.
+        Prefer cancel() for soft delete behavior.
+
+        Args:
+            db: Database session
+            subscription_id: Subscription UUID
+
+        Returns:
+            bool: True if deleted, False if not found
         """
-        result = await db.execute(select(SubscriptionModel).filter(
-            SubscriptionModel.id == subscription_id
-        ))
-        subscription = result.scalar_one_or_none()
+        try:
+            subscription = SubscriptionRepository.get_by_id(db, subscription_id)
+            if not subscription:
+                return False
 
-        if not subscription:
-            return False
+            db.delete(subscription)
+            db.commit()
 
-        await db.delete(subscription)
-        await db.commit()
-        return True
+            logger.warning(f"Subscription hard deleted: {subscription_id}")
+            return True
+
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error deleting subscription {subscription_id}: {str(e)}")
+            raise
+
+    @staticmethod
+    def get_all(
+            db: Session,
+            limit: int = 100,
+            offset: int = 0
+    ) -> List[SubscriptionModel]:
+        """
+        Get all subscriptions with pagination.
+
+        Args:
+            db: Database session
+            limit: Maximum number of results
+            offset: Number of results to skip
+
+        Returns:
+            List[SubscriptionModel]: List of subscriptions
+        """
+        return db.query(SubscriptionModel).order_by(
+            desc(SubscriptionModel.created_at)
+        ).limit(limit).offset(offset).all()
+
+    @staticmethod
+    def count_by_client(db: Session, client_id: UUID) -> int:
+        """
+        Count total subscriptions for a client.
+
+        Args:
+            db: Database session
+            client_id: Client UUID
+
+        Returns:
+            int: Total count
+        """
+        return db.query(SubscriptionModel).filter(
+            SubscriptionModel.client_id == client_id
+        ).count()
+
+    @staticmethod
+    def count_by_status(db: Session, status: SubscriptionStatusEnum) -> int:
+        """
+        Count subscriptions by status.
+
+        Args:
+            db: Database session
+            status: SubscriptionStatusEnum
+
+        Returns:
+            int: Total count
+        """
+        return db.query(SubscriptionModel).filter(
+            SubscriptionModel.status == status
+        ).count()
+
+    @staticmethod
+    def get_expiring_soon(
+            db: Session,
+            days_threshold: int = 7
+    ) -> List[SubscriptionModel]:
+        """
+        Get subscriptions expiring within a threshold (for renewal reminders).
+
+        Args:
+            db: Database session
+            days_threshold: Days from now to check (default: 7)
+
+        Returns:
+            List[SubscriptionModel]: List of subscriptions expiring soon
+        """
+        from datetime import timedelta
+
+        threshold_date = date.today() + timedelta(days=days_threshold)
+
+        return db.query(SubscriptionModel).filter(
+            and_(
+                SubscriptionModel.status == SubscriptionStatusEnum.ACTIVE,
+                SubscriptionModel.end_date <= threshold_date
+            )
+        ).order_by(SubscriptionModel.end_date).all()
+
+    @staticmethod
+    def get_expired(db: Session) -> List[SubscriptionModel]:
+        """
+        Get expired subscriptions (status still ACTIVE but end_date passed).
+
+        Useful for batch updating subscriptions to EXPIRED status.
+
+        Args:
+            db: Database session
+
+        Returns:
+            List[SubscriptionModel]: List of expired subscriptions
+        """
+        return db.query(SubscriptionModel).filter(
+            and_(
+                SubscriptionModel.status == SubscriptionStatusEnum.ACTIVE,
+                SubscriptionModel.end_date < date.today()
+            )
+        ).all()

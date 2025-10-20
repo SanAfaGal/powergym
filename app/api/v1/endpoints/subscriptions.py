@@ -1,6 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from app.models.subscription import Subscription, SubscriptionCreate, SubscriptionUpdate, SubscriptionStatus
+from app.models.subscription import (
+    Subscription,
+    SubscriptionCreate,
+    SubscriptionUpdate,
+    SubscriptionStatus,
+    SubscriptionRenewRequest,
+    SubscriptionCancelRequest,
+    SubscriptionStats
+)
 from app.services.subscription_service import SubscriptionService
 from app.api.dependencies import get_current_active_user
 from app.models.user import User
@@ -428,7 +436,7 @@ def update_subscription(
 )
 def cancel_subscription(
     subscription_id: UUID,
-    cancellation_reason: Optional[str] = Query(None, description="Reason for cancellation"),
+    cancel_request: Optional[SubscriptionCancelRequest] = None,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
@@ -442,6 +450,7 @@ def cancel_subscription(
             detail="Suscripción no encontrada"
         )
 
+    cancellation_reason = cancel_request.cancellation_reason if cancel_request else None
     canceled_subscription = SubscriptionService.cancel_subscription(
         db, subscription_id, cancellation_reason
     )
@@ -505,6 +514,111 @@ def activate_subscription(
                 detail="Error al activar la suscripción"
             )
         return activated_subscription
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post(
+    "/client/{client_id}/subscription/{subscription_id}/renew",
+    response_model=Subscription,
+    summary="Renew subscription",
+    description="Renew an existing subscription. Creates a new subscription based on the previous one.",
+    responses={
+        201: {
+            "description": "Subscription renewed successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "id": "223e4567-e89b-12d3-a456-426614174000",
+                        "client_id": "123e4567-e89b-12d3-a456-426614174001",
+                        "plan_id": "123e4567-e89b-12d3-a456-426614174002",
+                        "start_date": "2025-02-02",
+                        "end_date": "2025-03-02",
+                        "status": "scheduled",
+                        "created_at": "2025-10-13T10:30:00Z",
+                        "updated_at": "2025-10-13T10:30:00Z"
+                    }
+                }
+            }
+        },
+        400: {"description": "Cannot renew subscription"},
+        404: {"description": "Subscription not found"},
+        401: {"description": "Not authenticated"}
+    }
+)
+def renew_subscription(
+    client_id: UUID,
+    subscription_id: UUID,
+    renew_request: Optional[SubscriptionRenewRequest] = None,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Renew a subscription by creating a new one based on the previous subscription.
+    """
+    try:
+        cancellation_reason = renew_request.cancellation_reason if renew_request else None
+        renewed_subscription = SubscriptionService.renew_subscription(
+            db=db,
+            client_id=client_id,
+            subscription_id=subscription_id,
+            cancellation_reason=cancellation_reason
+        )
+        if not renewed_subscription:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Error al renovar la suscripción"
+            )
+        return renewed_subscription
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.get(
+    "/client/{client_id}/stats",
+    response_model=SubscriptionStats,
+    summary="Get subscription statistics",
+    description="Get detailed subscription statistics for a specific client.",
+    responses={
+        200: {
+            "description": "Subscription statistics",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "total_subscriptions": 10,
+                        "active_subscriptions": 1,
+                        "expired_subscriptions": 5,
+                        "canceled_subscriptions": 2,
+                        "pending_payment_subscriptions": 1,
+                        "scheduled_subscriptions": 1,
+                        "total_amount_paid": 500.00,
+                        "last_subscription_date": "2025-10-13T10:30:00Z",
+                        "next_renewal_date": "2025-11-13"
+                    }
+                }
+            }
+        },
+        400: {"description": "Client not found"},
+        401: {"description": "Not authenticated"}
+    }
+)
+def get_subscription_stats(
+    client_id: UUID,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get subscription statistics for a specific client.
+    """
+    try:
+        stats = SubscriptionService.get_subscription_stats(db, client_id)
+        return stats
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

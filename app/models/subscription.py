@@ -1,64 +1,101 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field
 from enum import Enum
 from datetime import date, datetime
 from uuid import UUID
 from typing import Optional
+
 
 class SubscriptionStatus(str, Enum):
     ACTIVE = "active"
     EXPIRED = "expired"
     PENDING_PAYMENT = "pending_payment"
     CANCELED = "canceled"
+    SCHEDULED = "scheduled"
 
-class SubscriptionBase(BaseModel):
-    client_id: UUID
-    plan_id: UUID
-    start_date: date
-    end_date: date
 
-    @field_validator('end_date')
-    @classmethod
-    def validate_end_date(cls, v: date, info) -> date:
-        if 'start_date' in info.data and v <= info.data['start_date']:
-            raise ValueError(f'End date ({v}) must be after start date ({info.data["start_date"]})')
-        return v
+# ============= INPUT SCHEMAS =============
 
-class SubscriptionCreate(SubscriptionBase):
-    status: SubscriptionStatus = SubscriptionStatus.PENDING_PAYMENT
+class SubscriptionCreateInput(BaseModel):
+    """Input to create a subscription"""
+    plan_id: UUID = Field(..., description="Plan ID")
+    start_date: date = Field(..., description="Subscription start date")
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [{
+                "plan_id": "123e4567-e89b-12d3-a456-426614174001",
+                "start_date": "2025-01-01"
+            }]
+        }
+    }
+
+
+class SubscriptionRenewInput(BaseModel):
+    """Input to renew a subscription"""
+    plan_id: Optional[UUID] = Field(
+        default=None,
+        description="Plan ID for renewal (defaults to same plan if not provided)"
+    )
 
     model_config = {
         "json_schema_extra": {
             "examples": [
                 {
-                    "client_id": "123e4567-e89b-12d3-a456-426614174000",
-                    "plan_id": "123e4567-e89b-12d3-a456-426614174001",
-                    "start_date": "2025-01-01",
-                    "end_date": "2025-02-01",
-                    "status": "pending_payment"
+                    "plan_id": None
+                },
+                {
+                    "plan_id": "123e4567-e89b-12d3-a456-426614174001"
                 }
             ]
         }
     }
 
-class SubscriptionUpdate(BaseModel):
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
-    status: Optional[SubscriptionStatus] = None
-    cancellation_date: Optional[date] = None
+
+class SubscriptionCancelInput(BaseModel):
+    """Input to cancel a subscription"""
+    cancellation_reason: Optional[str] = Field(
+        default=None,
+        description="Reason for cancellation"
+    )
+
+
+# ============= INTERNAL SCHEMAS =============
+
+class SubscriptionCreate(BaseModel):
+    """Internal schema with client_id injected"""
+    client_id: UUID
+    plan_id: UUID
+    start_date: date
+
+
+class SubscriptionRenew(BaseModel):
+    """Internal schema for renewal"""
+    client_id: UUID
+    subscription_id: UUID
+    plan_id: Optional[UUID] = None
+
+
+class SubscriptionCancel(BaseModel):
+    """Internal schema for cancellation"""
+    subscription_id: UUID
     cancellation_reason: Optional[str] = None
 
-class Subscription(SubscriptionBase):
+
+# ============= OUTPUT SCHEMAS =============
+
+class Subscription(BaseModel):
+    """Subscription response"""
     id: UUID
+    client_id: UUID
+    plan_id: UUID
+    start_date: date
+    end_date: date
     status: SubscriptionStatus
     cancellation_date: Optional[date] = None
     cancellation_reason: Optional[str] = None
     created_at: datetime
     updated_at: datetime
-    meta_info: dict = {}
+    meta_info: Optional[dict] = None
 
     class Config:
         from_attributes = True
-        use_enum_values = True
-
-class SubscriptionInDB(Subscription):
-    pass
