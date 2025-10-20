@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
-from app.models.face_recognition import (
+from app.schemas.face_recognition import (
     FaceRegistrationRequest,
     FaceRegistrationResponse,
     FaceAuthenticationRequest,
@@ -13,7 +13,7 @@ from app.models.face_recognition import (
 from app.services.face_recognition.core import FaceRecognitionService
 from app.services.client_service import ClientService
 from app.api.dependencies import get_current_user
-from app.models.user import User
+from app.schemas.user import User
 from app.db.session import get_db
 from uuid import UUID
 

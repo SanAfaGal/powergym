@@ -11,8 +11,8 @@ from app.core.security import (
     decode_token,
     verify_password
 )
-from app.models.token import Token, RefreshTokenRequest
-from app.models.user import UserCreate, User, UserInDB
+from app.schemas.token import Token, RefreshTokenRequest
+from app.schemas.user import UserCreate, User, UserInDB
 from app.services.user_service import UserService
 from app.api.dependencies import get_current_user, get_current_active_user
 

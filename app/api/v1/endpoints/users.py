@@ -1,7 +1,7 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from app.models.user import User, UserUpdate, PasswordChange, UserRole
+from app.schemas.user import User, UserUpdate, PasswordChange, UserRole
 from app.api.dependencies import get_current_active_user, get_current_admin_user
 from app.services.user_service import UserService
 from app.core.security import verify_password

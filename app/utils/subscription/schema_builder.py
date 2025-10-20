@@ -1,4 +1,4 @@
-from app.models.subscription import (
+from app.schemas.subscription import (
     SubscriptionCreateInput,
     SubscriptionCreate,
     SubscriptionRenewInput,

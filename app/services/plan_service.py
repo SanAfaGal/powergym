@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from app.repositories.plan_repository import PlanRepository
-from app.models.plan import PlanCreate, PlanUpdate
+from app.schemas.plan import PlanCreate, PlanUpdate
 from app.db.models import DurationTypeEnum
 from uuid import UUID
 from typing import Optional, List

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 from typing import List
 
-from app.models.subscription import (
+from app.schemas.subscription import (
     Subscription,
     SubscriptionCreateInput,
     SubscriptionRenewInput,
@@ -11,7 +11,7 @@ from app.models.subscription import (
 )
 from app.services.subscription_service import SubscriptionService
 from app.api.dependencies import get_current_active_user
-from app.models.user import User
+from app.schemas.user import User
 from app.db.session import get_db
 from app.utils.subscription.schema_builder import SubscriptionSchemaBuilder
 from app.utils.subscription.validators import SubscriptionValidator

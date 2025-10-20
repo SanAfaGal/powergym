@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from uuid import UUID
-from app.models.subscription import Subscription, SubscriptionCreate, SubscriptionRenew, SubscriptionCancel
+from app.schemas.subscription import Subscription, SubscriptionCreate, SubscriptionRenew, SubscriptionCancel
 from app.repositories.subscription_repository import SubscriptionRepository
 from app.repositories.plan_repository import PlanRepository
 from app.db.models import SubscriptionStatusEnum

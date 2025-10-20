@@ -3,7 +3,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from app.core.security import decode_token
-from app.models.user import User, UserRole
+from app.schemas.user import User, UserRole
 from app.services.user_service import UserService
 from app.db.session import get_db
 

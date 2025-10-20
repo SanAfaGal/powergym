@@ -6,7 +6,7 @@ from sqlalchemy import select
 
 from app.repositories.attendance_repository import AttendanceRepository
 from app.db.models import AttendanceModel, ClientModel
-from app.models.attendance import AttendanceResponse, AttendanceWithClientInfo
+from app.schemas.attendance import AttendanceResponse, AttendanceWithClientInfo
 
 
 class AttendanceService:

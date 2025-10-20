@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.models.user import UserRole
+from app.schemas.user import UserRole
 
 router = APIRouter()
 

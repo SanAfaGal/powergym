@@ -4,10 +4,10 @@ from uuid import UUID
 from typing import List
 import logging
 
-from app.models.client import Client, ClientCreate, ClientUpdate, ClientDashboard
+from app.schemas.client import Client, ClientCreate, ClientUpdate, ClientDashboard
 from app.services.client_service import ClientService
 from app.api.dependencies import get_current_active_user
-from app.models.user import User
+from app.schemas.user import User
 from app.db.session import get_db
 from app.utils.client.validators import ClientValidator
 

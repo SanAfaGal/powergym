@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from app.models.payment import Payment, PaymentCreate
+from app.schemas.payment import Payment, PaymentCreate
 from app.repositories.payment_repository import PaymentRepository
 from app.repositories.subscription_repository import SubscriptionRepository
 from app.repositories.plan_repository import PlanRepository

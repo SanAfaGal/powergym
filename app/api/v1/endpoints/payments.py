@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.api.dependencies import get_db
-from app.models.payment import PaymentCreate, Payment
+from app.schemas.payment import PaymentCreate, Payment
 from app.services.payment_service import PaymentService
 from typing import List, Dict, Any
 from app.api.dependencies import get_current_active_user
 from uuid import UUID
-from app.models.user import User
+from app.schemas.user import User
 from decimal import Decimal
 
 router = APIRouter()

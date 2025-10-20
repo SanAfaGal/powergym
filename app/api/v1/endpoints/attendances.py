@@ -5,12 +5,12 @@ from fastapi import APIRouter, HTTPException, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from app.models.attendance import AttendanceResponse, AttendanceWithClientInfo
-from app.models.face_recognition import FaceAuthenticationRequest
+from app.schemas.attendance import AttendanceResponse, AttendanceWithClientInfo
+from app.schemas.face_recognition import FaceAuthenticationRequest
 from app.services.attendance_service import AttendanceService
 from app.services.face_recognition.core import FaceRecognitionService
 from app.api.dependencies import get_current_user
-from app.models.user import User
+from app.schemas.user import User
 from app.db.session import get_async_db, get_db
 
 

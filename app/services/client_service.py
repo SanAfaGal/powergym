@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from app.models.client import (
+from app.schemas.client import (
     Client, ClientCreate, ClientUpdate, DocumentType, GenderType, ClientDashboard, BiometricInfo, SubscriptionInfo, ClientStats
 )
 from app.repositories.client_repository import ClientRepository

@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from app.models.plan import Plan, PlanCreate, PlanUpdate
+from app.schemas.plan import Plan, PlanCreate, PlanUpdate
 from app.services.plan_service import PlanService
 from app.api.dependencies import get_current_active_user
-from app.models.user import User
+from app.schemas.user import User
 from app.db.session import get_db
 from uuid import UUID
 from typing import List
