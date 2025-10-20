@@ -1,12 +1,9 @@
 from sqlalchemy.orm import Session
 from app.models.client import (
-    Client, ClientCreate, ClientUpdate, DocumentType, GenderType
-)
-from app.models.client_dashboard import (
-    ClientDashboard, BiometricInfo, SubscriptionInfo, ClientStats
+    Client, ClientCreate, ClientUpdate, DocumentType, GenderType, ClientDashboard, BiometricInfo, SubscriptionInfo, ClientStats
 )
 from app.repositories.client_repository import ClientRepository
-from app.db.models import DocumentTypeEnum, GenderTypeEnum, BiometricTypeEnum, ClientBiometricModel
+from app.db.models import DocumentTypeEnum, GenderTypeEnum, BiometricTypeEnum
 from app.core.encryption import get_encryption_service
 from uuid import UUID
 from typing import List, Optional
@@ -207,6 +204,31 @@ class ClientService:
             )
             for client in client_models
         ]
+
+    @staticmethod
+    def get_client_by_dni(db: Session, dni_number: str) -> Client | None:
+        client_model = ClientRepository.get_by_dni(db, dni_number)
+
+        if client_model:
+            return Client(
+                id=client_model.id,
+                dni_type=DocumentType(client_model.dni_type.value),
+                dni_number=client_model.dni_number,
+                first_name=client_model.first_name,
+                middle_name=client_model.middle_name,
+                last_name=client_model.last_name,
+                second_last_name=client_model.second_last_name,
+                phone=client_model.phone,
+                alternative_phone=client_model.alternative_phone,
+                birth_date=client_model.birth_date,
+                gender=GenderType(client_model.gender.value),
+                address=client_model.address,
+                is_active=client_model.is_active,
+                created_at=client_model.created_at.isoformat(),
+                updated_at=client_model.updated_at.isoformat(),
+                meta_info=client_model.meta_info
+            )
+        return None
 
     @staticmethod
     def get_client_dashboard(db: Session, client_id: UUID) -> Optional[ClientDashboard]:
