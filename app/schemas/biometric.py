@@ -37,9 +37,6 @@ class Biometric(BiometricBase):
         from_attributes = True
         use_enum_values = True
 
-class BiometricInDB(Biometric):
-    pass
-
 class BiometricSearchResult(BaseModel):
     biometric: Biometric
     similarity: float
