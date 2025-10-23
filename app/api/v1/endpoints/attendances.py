@@ -1,116 +1,200 @@
+# ============================================================================
+# attendance/routes.py - CHECK-IN ENDPOINT (SYNC VERSION)
+# ============================================================================
+
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional
 from uuid import UUID
-from fastapi import APIRouter, HTTPException, Depends, Query, status
-from sqlalchemy.ext.asyncio import AsyncSession
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.schemas.attendance import AttendanceResponse, AttendanceWithClientInfo
+from app.db.session import get_db
+from app.api.dependencies import get_current_user
+import logging
+from app.schemas.user import User
 from app.schemas.face_recognition import FaceAuthenticationRequest
+from app.schemas.attendance import (
+    AttendanceResponse,
+    AttendanceWithClientInfo,
+    CheckInResponse
+)
 from app.services.attendance_service import AttendanceService
 from app.services.face_recognition.core import FaceRecognitionService
-from app.api.dependencies import get_current_user
-from app.schemas.user import User
-from app.db.session import get_async_db, get_db
 
-
-router = APIRouter()
+logger = logging.getLogger(__name__)
+router = APIRouter(tags=["attendances"])
 
 
 @router.post(
-    "/check-in",
-    response_model=dict,
+    "/attendances/check-in",
+    response_model=CheckInResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Check-in with face recognition",
-    description="Validate client identity via face recognition and record attendance.",
+    summary="Check-in with facial recognition",
+    description="Validates client identity and records gym entry.",
     responses={
         201: {
-            "description": "Check-in successful",
+            "description": "Entry recorded successfully",
             "content": {
                 "application/json": {
                     "example": {
                         "success": True,
-                        "message": "Check-in successful",
+                        "message": "Welcome to the gym",
+                        "can_enter": True,
                         "attendance": {
-                            "id": "123e4567-e89b-12d3-a456-426614174000",
-                            "client_id": "987fcdeb-51a2-43f1-9876-543210fedcba",
-                            "check_in": "2025-10-07T10:30:00Z",
+                            "id": "550e8400-e29b-41d4-a716-446655440000",
+                            "client_id": "550e8400-e29b-41d4-a716-446655440001",
+                            "check_in": "2025-10-22T10:30:00Z",
+                            "meta_info": {}
                         },
                         "client_info": {
-                            "first_name": "Juan",
-                            "last_name": "Pérez",
-                            "dni_number": "12345678"
-                        },
-                        "confidence": 0.95
+                            "first_name": "John",
+                            "last_name": "Doe",
+                            "dni_number": "1234567890"
+                        }
                     }
                 }
             }
         },
-        401: {"description": "Authentication failed - face not recognized"},
-        400: {"description": "Invalid image or no face detected"}
+        400: {
+            "description": "Invalid image or no face detected",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "No face detected in the image",
+                        "error": "no_face_detected"
+                    }
+                }
+            }
+        },
+        401: {
+            "description": "Face not recognized or insufficient confidence",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Face not recognized in the system",
+                        "error": "face_not_recognized"
+                    }
+                }
+            }
+        },
+        403: {
+            "description": "Access denied: inactive client, expired subscription, etc",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": False,
+                        "message": "Access denied",
+                        "can_enter": False,
+                        "reason": "subscription_expired",
+                        "detail": "Your subscription expired on 2025-10-20. Renew it to continue."
+                    }
+                }
+            }
+        }
     }
 )
-async def check_in_with_face(
+def check_in_with_face(
     request: FaceAuthenticationRequest,
     current_user: User = Depends(get_current_user),
-    db_sync: Session = Depends(get_db),
-    db_async: AsyncSession = Depends(get_async_db)
+    db: Session = Depends(get_db)
 ):
     """
-    Check-in a client using face recognition.
+    Record client entry via facial recognition.
 
-    This endpoint validates the client's identity through facial recognition
-    and automatically creates an attendance record upon successful validation.
+    **Flow:**
+    1. Validates image and detects face
+    2. Recognizes client via facial recognition
+    3. Verifies client status and subscription
+    4. Records attendance if everything is valid
+
+    **Response codes:**
+    - `201`: Entry recorded successfully (can enter)
+    - `400`: Invalid image or no face detected (technical issue)
+    - `401`: Face not recognized (client not identified)
+    - `403`: Access denied (client/subscription invalid)
+
+    **Frontend should:**
+    - Capture photo from webcam
+    - Send as base64 in `image_base64`
+    - Show "processing" animation during request
+    - Handle each HTTP code with specific messages
     """
-    auth_result = FaceRecognitionService.authenticate_face(
-        db=db_sync,
+
+    # 1. Validate image and recognize face (SYNC)
+    face_result = FaceRecognitionService.authenticate_face(
+        db=db,
         image_base64=request.image_base64
     )
 
-    if not auth_result.get("success"):
+    if not face_result.get("success"):
+        error_reason = face_result.get("error")
+        # 400 for image issues, 401 for unrecognized face
+        response_status = (
+            status.HTTP_400_BAD_REQUEST
+            if error_reason in ["no_face_detected", "invalid_image", "blurry_image"]
+            else status.HTTP_401_UNAUTHORIZED
+        )
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=auth_result.get("error", "Face authentication failed")
+            status_code=response_status,
+            detail=face_result.get("detail", "Facial recognition failed"),
+            headers={"X-Error-Reason": error_reason}
         )
 
-    client_id = auth_result.get("client_id")
-    confidence = auth_result.get("confidence", 0.0)
+    client_id = UUID(face_result.get("client_id"))
 
-    attendance = await AttendanceService.create_attendance(
-        db=db_async,
-        client_id=UUID(client_id),
+    # 2. Validate client access (SYNC)
+    can_access, reason, client_info = AttendanceService.validate_client_access(
+        db, client_id
+    )
+
+    # If cannot access, return 403 with details
+    if not can_access:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_get_denial_message(reason),
+            headers={"X-Denial-Reason": reason}
+        )
+
+    # 3. Record attendance (SYNC)
+    attendance = AttendanceService.create_attendance(
+        db=db,
+        client_id=client_id,
         meta_info={
-            "confidence": confidence,
-            "authenticated_by": str(current_user.username)
+            "ip": getattr(current_user, "ip", None),
+            "authenticated_by": current_user.username
         }
     )
 
-    return {
-        "success": True,
-        "message": "Check-in successful",
-        "attendance": {
-            "id": str(attendance.id),
-            "client_id": str(attendance.client_id),
-            "check_in": attendance.check_in.isoformat(),
-        },
-        "client_info": auth_result.get("client_info"),
-        "confidence": confidence
-    }
+    return CheckInResponse(
+        success=True,
+        message="Welcome to the gym",
+        can_enter=True,
+        attendance=attendance,
+        client_info=client_info
+    )
 
 
 @router.get(
     "/{attendance_id}",
     response_model=AttendanceResponse,
+    status_code=status.HTTP_200_OK,
     summary="Get attendance by ID",
-    description="Retrieve a specific attendance record by its ID."
+    description="Retrieves details of a specific attendance record."
 )
-async def get_attendance(
+def get_attendance(
     attendance_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_db)
+    db: Session = Depends(get_db)
 ):
-    """Get a specific attendance record."""
-    attendance = await AttendanceService.get_attendance_by_id(db, attendance_id)
+    """
+    Get full details of an attendance record.
+
+    **Codes:**
+    - `200`: Attendance found
+    - `404`: Attendance does not exist
+    """
+    attendance = AttendanceService.get_by_id(db, attendance_id)
 
     if not attendance:
         raise HTTPException(
@@ -122,85 +206,166 @@ async def get_attendance(
 
 
 @router.get(
-    "/client/{client_id}",
-    response_model=List[AttendanceResponse],
-    summary="Get client attendances",
-    description="Retrieve all attendance records for a specific client."
+    "/clients/{client_id}/attendances",
+    response_model=list[AttendanceResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Client attendance history",
+    description="Gets all recorded entries for a client with pagination."
 )
-async def get_client_attendances(
+def get_client_attendances(
     client_id: UUID,
-    limit: int = Query(50, ge=1, le=500, description="Maximum number of records"),
-    offset: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(50, ge=1, le=500, description="Records per page"),
+    offset: int = Query(0, ge=0, description="Skip records"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_db)
+    db: Session = Depends(get_db)
 ):
-    """Get all attendance records for a specific client."""
-    attendances = await AttendanceService.get_client_attendances(
+    """
+    Get all entries for a client.
+
+    **Parameters:**
+    - `client_id`: Client UUID
+    - `limit`: Number of records (max 500)
+    - `offset`: For pagination
+
+    **Codes:**
+    - `200`: History retrieved (may be empty list)
+
+    **Frontend can:**
+    - Implement infinite scroll with offset
+    - Show "No records" if returns empty list
+    """
+    attendances = AttendanceService.get_client_attendances(
         db=db,
         client_id=client_id,
         limit=limit,
         offset=offset
     )
-
     return attendances
 
 
 @router.get(
-    "",
-    response_model=List[AttendanceWithClientInfo],
+    "/attendances",
+    response_model=list[AttendanceWithClientInfo],
+    status_code=status.HTTP_200_OK,
     summary="Get all attendances",
-    description="Retrieve all attendance records with optional date filtering."
+    description="Gets all system attendances with client info (requires admin)."
 )
-async def get_all_attendances(
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of records"),
-    offset: int = Query(0, ge=0, description="Number of records to skip"),
-    start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
-    end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
+def get_all_attendances(
+    limit: int = Query(100, ge=1, le=1000, description="Records per page"),
+    offset: int = Query(0, ge=0, description="Skip records"),
+    start_date: Optional[datetime] = Query(
+        None,
+        description="Start date (ISO 8601): 2025-10-01T00:00:00Z"
+    ),
+    end_date: Optional[datetime] = Query(
+        None,
+        description="End date (ISO 8601): 2025-10-31T23:59:59Z"
+    ),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_db)
+    db: Session = Depends(get_db)
 ):
-    """Get all attendance records with client information."""
-    attendances = await AttendanceService.get_all_attendances(
+    """
+    Get all system attendances with filters.
+
+    **Parameters:**
+    - `limit`: Records per page (max 1000)
+    - `offset`: For pagination
+    - `start_date`: Filter from date (optional)
+    - `end_date`: Filter until date (optional)
+
+    **Codes:**
+    - `200`: Attendances retrieved (may be empty list)
+
+    **Frontend can:**
+    - Use for general dashboard
+    - Filter by date range
+    - Export to CSV/PDF
+    """
+    attendances = AttendanceService.get_all_attendances(
         db=db,
         limit=limit,
         offset=offset,
         start_date=start_date,
         end_date=end_date
     )
-
     return attendances
 
 
 @router.get(
-    "/today/all",
-    response_model=List[AttendanceWithClientInfo],
-    summary="Get today's attendances",
-    description="Retrieve all attendance records for today."
+    "/today",
+    response_model=list[AttendanceWithClientInfo],
+    status_code=status.HTTP_200_OK,
+    summary="Today's attendances",
+    description="Gets all entries recorded for today."
 )
-async def get_today_attendances(
+def get_today_attendances(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_db)
+    db: Session = Depends(get_db)
 ):
-    """Get all attendance records for today."""
-    attendances = await AttendanceService.get_today_attendances(db)
+    """
+    Get all entries for today.
+
+    **Codes:**
+    - `200`: Data retrieved (may be empty list if no entries)
+
+    **Frontend can:**
+    - Refresh every N seconds for real-time occupancy
+    - Show "No entries today" if returns empty list
+    - Use for gym floor monitoring
+    """
+    attendances = AttendanceService.get_today_attendances(db)
     return attendances
 
 
 @router.get(
-    "/client/{client_id}/count",
+    "/clients/{client_id}/attendances/count",
     response_model=dict,
+    status_code=status.HTTP_200_OK,
     summary="Count client attendances",
-    description="Count attendance records for a client within a date range."
+    description="Counts entries for a client in a specific period."
 )
-async def count_client_attendances(
+def count_client_attendances(
     client_id: UUID,
-    start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
-    end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
+    start_date: Optional[datetime] = Query(
+        None,
+        description="Start date (ISO): 2025-10-01T00:00:00Z"
+    ),
+    end_date: Optional[datetime] = Query(
+        None,
+        description="End date (ISO): 2025-10-31T23:59:59Z"
+    ),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_db)
+    db: Session = Depends(get_db)
 ):
-    """Count attendance records for a specific client."""
-    count = await AttendanceService.count_client_attendances(
+    """
+    Count client entries in a period.
+
+    **Parameters:**
+    - `client_id`: Client UUID
+    - `start_date`: Start date (optional)
+    - `end_date`: End date (optional)
+
+    **Response:**
+    ```json
+    {
+        "client_id": "uuid",
+        "total_entries": 15,
+        "period": {
+            "start_date": "2025-10-01",
+            "end_date": "2025-10-31"
+        }
+    }
+    ```
+
+    **Codes:**
+    - `200`: Count completed (may be 0)
+
+    **Frontend can:**
+    - Show usage statistics
+    - Validate visit quota if exists
+    - Generate monthly reports
+    """
+    count = AttendanceService.count_client_attendances(
         db=db,
         client_id=client_id,
         start_date=start_date,
@@ -209,7 +374,39 @@ async def count_client_attendances(
 
     return {
         "client_id": str(client_id),
-        "count": count,
-        "start_date": start_date.isoformat() if start_date else None,
-        "end_date": end_date.isoformat() if end_date else None
+        "total_entries": count,
+        "period": {
+            "start_date": start_date.isoformat() if start_date else None,
+            "end_date": end_date.isoformat() if end_date else None
+        }
     }
+
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+def _get_denial_message(reason: str) -> str:
+    """
+    Get readable message for access denial.
+
+    Maps reason codes to user-facing messages.
+    """
+    messages = {
+        "no_subscription": (
+            "You do not have an active subscription. Buy a plan to access."
+        ),
+        "subscription_expired": (
+            "Your subscription has expired. Renew it to continue."
+        ),
+        "client_inactive": (
+            "Your account is disabled. Contact administration."
+        ),
+        "client_not_found": (
+            "Your profile was not found in the system."
+        )
+    }
+    return messages.get(
+        reason,
+        "Access denied. Please contact administration."
+    )

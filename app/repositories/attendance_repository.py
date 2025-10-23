@@ -1,59 +1,100 @@
-from sqlalchemy.orm import Session
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from app.db.models import AttendanceModel, ClientModel
-from typing import Optional, List
+# ============================================================================
+# attendance/repository.py - SYNC VERSION
+# ============================================================================
+
+from datetime import datetime, date
+from typing import List, Optional
 from uuid import UUID
-from datetime import datetime
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.db.models import AttendanceModel, ClientModel
+
 
 class AttendanceRepository:
+    """
+    Repositorio para operaciones de base de datos con Attendances.
+
+    Proporciona métodos para CRUD y consultas avanzadas de forma síncrona.
+    """
+
     @staticmethod
-    def create(db: Session, client_id: UUID,
-               meta_info: dict = None) -> AttendanceModel:
+    def create(
+            db: Session,
+            client_id: UUID,
+            meta_info: Optional[dict] = None
+    ) -> AttendanceModel:
         """
-        Create a new attendance record in the database.
+        Crear un nuevo registro de asistencia.
+
+        Args:
+            db: Sesión de base de datos
+            client_id: ID del cliente
+            meta_info: Información adicional
+
+        Returns:
+            Modelo de asistencia creado
         """
-        db_attendance = AttendanceModel(
+        attendance = AttendanceModel(
             client_id=client_id,
             meta_info=meta_info or {}
         )
-        db.add(db_attendance)
+        db.add(attendance)
         db.commit()
-        db.refresh(db_attendance)
-        return db_attendance
+        db.refresh(attendance)
+        return attendance
 
     @staticmethod
-    def get_by_id(db: Session, attendance_id: UUID) -> Optional[AttendanceModel]:
-        """
-        Get attendance by ID.
-        """
-        return db.query(AttendanceModel).filter(AttendanceModel.id == attendance_id).first()
+    def get_by_id(
+            db: Session,
+            attendance_id: UUID
+    ) -> Optional[AttendanceModel]:
+        """Obtener asistencia por ID."""
+        return db.query(AttendanceModel).filter(
+            AttendanceModel.id == attendance_id
+        ).first()
 
     @staticmethod
-    def get_by_client_id(db: Session, client_id: UUID, limit: int = 100,
-                        offset: int = 0) -> List[AttendanceModel]:
-        """
-        Get all attendance records for a specific client.
-        """
+    def get_by_client_id(
+            db: Session,
+            client_id: UUID,
+            limit: int = 50,
+            offset: int = 0
+    ) -> List[AttendanceModel]:
+        """Obtener todas las asistencias de un cliente."""
         return db.query(AttendanceModel).filter(
             AttendanceModel.client_id == client_id
-        ).order_by(AttendanceModel.check_in.desc()).offset(offset).limit(limit).all()
+        ).order_by(
+            AttendanceModel.check_in.desc()
+        ).offset(offset).limit(limit).all()
 
     @staticmethod
-    def get_all(db: Session, limit: int = 100, offset: int = 0) -> List[AttendanceModel]:
-        """
-        Get all attendance records.
-        """
+    def get_all(
+            db: Session,
+            limit: int = 100,
+            offset: int = 0
+    ) -> List[AttendanceModel]:
+        """Obtener todas las asistencias."""
         return db.query(AttendanceModel).order_by(
             AttendanceModel.check_in.desc()
         ).offset(offset).limit(limit).all()
 
     @staticmethod
-    def get_with_client_info(db: Session, limit: int = 100, offset: int = 0):
+    def get_with_client_info(
+            db: Session,
+            limit: int = 100,
+            offset: int = 0,
+            start_date: Optional[datetime] = None,
+            end_date: Optional[datetime] = None
+    ) -> List[tuple]:
         """
-        Get attendance records with client information.
+        Obtener asistencias con información del cliente.
+
+        Returns:
+            Lista de tuplas: (AttendanceModel, first_name, last_name, dni_number)
         """
-        return db.query(
+        query = db.query(
             AttendanceModel,
             ClientModel.first_name,
             ClientModel.last_name,
@@ -62,76 +103,49 @@ class AttendanceRepository:
             ClientModel, AttendanceModel.client_id == ClientModel.id
         ).order_by(
             AttendanceModel.check_in.desc()
-        ).offset(offset).limit(limit).all()
-
-    @staticmethod
-    def get_by_date_range(db: Session, start_date: datetime, end_date: datetime,
-                         limit: int = 1000, offset: int = 0) -> List[AttendanceModel]:
-        """
-        Get attendance records within a date range.
-        """
-        return db.query(AttendanceModel).filter(
-            AttendanceModel.check_in >= start_date,
-            AttendanceModel.check_in <= end_date
-        ).order_by(AttendanceModel.check_in.desc()).offset(offset).limit(limit).all()
-
-    @staticmethod
-    async def create_async(db: AsyncSession, client_id: UUID,
-                          meta_info: dict = None) -> AttendanceModel:
-        """
-        Create a new attendance record in the database (async).
-        """
-        db_attendance = AttendanceModel(
-            client_id=client_id,
-            meta_info=meta_info or {}
         )
-        db.add(db_attendance)
-        await db.commit()
-        await db.refresh(db_attendance)
-        return db_attendance
+
+        if start_date:
+            query = query.filter(AttendanceModel.check_in >= start_date)
+        if end_date:
+            query = query.filter(AttendanceModel.check_in <= end_date)
+
+        return query.offset(offset).limit(limit).all()
 
     @staticmethod
-    async def get_by_id_async(db: AsyncSession, attendance_id: UUID) -> Optional[AttendanceModel]:
-        """
-        Get attendance by ID (async).
-        """
-        result = await db.execute(select(AttendanceModel).filter(AttendanceModel.id == attendance_id))
-        return result.scalar_one_or_none()
-
-    @staticmethod
-    async def get_by_client_id_async(db: AsyncSession, client_id: UUID,
-                                    limit: int = 100, offset: int = 0) -> List[AttendanceModel]:
-        """
-        Get all attendance records for a specific client (async).
-        """
-        query = select(AttendanceModel).filter(
+    def count_by_client(
+            db: Session,
+            client_id: UUID,
+            start_date: Optional[datetime] = None,
+            end_date: Optional[datetime] = None
+    ) -> int:
+        """Contar asistencias de un cliente en un período."""
+        query = db.query(func.count(AttendanceModel.id)).filter(
             AttendanceModel.client_id == client_id
-        ).order_by(AttendanceModel.check_in.desc()).offset(offset).limit(limit)
-        result = await db.execute(query)
-        return result.scalars().all()
+        )
+
+        if start_date:
+            query = query.filter(AttendanceModel.check_in >= start_date)
+        if end_date:
+            query = query.filter(AttendanceModel.check_in <= end_date)
+
+        return query.scalar() or 0
 
     @staticmethod
-    async def get_all_async(db: AsyncSession, limit: int = 100,
-                           offset: int = 0) -> List[AttendanceModel]:
-        """
-        Get all attendance records (async).
-        """
-        query = select(AttendanceModel).order_by(
-            AttendanceModel.check_in.desc()
-        ).offset(offset).limit(limit)
-        result = await db.execute(query)
-        return result.scalars().all()
+    def get_today(
+            db: Session,
+            limit: int = 1000,
+            offset: int = 0
+    ) -> List[tuple]:
+        """Obtener asistencias de hoy con info del cliente."""
+        today = date.today()
+        start_of_day = datetime.combine(today, datetime.min.time())
+        end_of_day = datetime.combine(today, datetime.max.time())
 
-    @staticmethod
-    async def get_by_date_range_async(db: AsyncSession, start_date: datetime,
-                                     end_date: datetime, limit: int = 1000,
-                                     offset: int = 0) -> List[AttendanceModel]:
-        """
-        Get attendance records within a date range (async).
-        """
-        query = select(AttendanceModel).filter(
-            AttendanceModel.check_in >= start_date,
-            AttendanceModel.check_in <= end_date
-        ).order_by(AttendanceModel.check_in.desc()).offset(offset).limit(limit)
-        result = await db.execute(query)
-        return result.scalars().all()
+        return AttendanceRepository.get_with_client_info(
+            db=db,
+            limit=limit,
+            offset=offset,
+            start_date=start_of_day,
+            end_date=end_of_day
+        )
