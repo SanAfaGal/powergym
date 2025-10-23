@@ -53,8 +53,8 @@ class FaceDatabase:
 
             meta_info = {
                 "encoding_version": "mediapipe_v1_vector",
-                "model": "MediaPipe FaceMesh + FaceDetection",
-                "embedding_dimensions": 128,
+                "model": "InsightFace",
+                "embedding_dimensions": 512,
                 "encryption": "AES-256-GCM",
                 "thumbnail_quality": settings.THUMBNAIL_COMPRESSION_QUALITY
             }
@@ -121,7 +121,7 @@ class FaceDatabase:
 
         Args:
             db: Database session
-            embedding: 128-dimensional face embedding to search for
+            embedding: dimensional face embedding to search for
             limit: Maximum number of results
             distance_threshold: Maximum cosine distance for matches
 

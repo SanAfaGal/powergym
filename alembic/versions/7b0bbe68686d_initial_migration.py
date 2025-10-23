@@ -85,7 +85,7 @@ def upgrade() -> None:
     sa.Column('client_id', sa.UUID(), nullable=False),
     sa.Column('type', postgresql.ENUM('FACE', 'FINGERPRINT', name='biometric_type'), nullable=False),
     sa.Column('thumbnail', sa.Text(), nullable=True),
-    sa.Column('embedding_vector', pgvector.sqlalchemy.Vector(dim=128), nullable=True),
+    sa.Column('embedding_vector', pgvector.sqlalchemy.Vector(dim=512), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=False),
     sa.Column('meta_info', sa.JSON(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),

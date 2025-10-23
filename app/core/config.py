@@ -46,6 +46,13 @@ class Settings(BaseSettings):
     REDIS_URL: Optional[str] = Field(None, description="Redis connection URL")
 
     # ==================== FACE RECOGNITION & MEDIAPIPE ====================
+    EMBEDDING_DIMENSIONS: int
+
+    # InsightFace
+    INSIGHTFACE_MODEL: str = "buffalo_l"  # buffalo_s, buffalo_l, buffalo_sc
+    INSIGHTFACE_DET_SIZE: int = 640
+    INSIGHTFACE_CTX_ID: int = -1  # -1 para CPU, 0 para GPU
+
     FACE_RECOGNITION_TOLERANCE: float = Field(
         default=0.6,
         ge=0.0,

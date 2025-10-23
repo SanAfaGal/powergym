@@ -86,7 +86,7 @@ class ClientBiometricModel(Base):
     client_id = Column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
     type = Column(ENUM(BiometricTypeEnum, name="biometric_type"), nullable=False)
     thumbnail = Column(Text, nullable=True)
-    embedding_vector = Column(Vector(128), nullable=True)
+    embedding_vector = Column(Vector(512), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     meta_info = Column(JSON, default={}, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

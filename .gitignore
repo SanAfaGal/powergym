@@ -87,3 +87,6 @@ biometric_data/
 # No ignores esto:
 !supabase/migrations/
 !alembic/
+
+#Ignore cursor AI rules
+.cursor\rules\codacy.mdc

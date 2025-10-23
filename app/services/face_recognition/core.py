@@ -24,44 +24,25 @@ class FaceRecognitionService:
             image_base64: Base64 encoded image string
 
         Returns:
-            Tuple of (128-dim embedding, thumbnail)
+            Tuple of (dim embedding, thumbnail)
 
         Raises:
             ValueError: If image processing or face extraction fails
         """
         image_array = ImageProcessor.decode_base64_image(image_base64)
 
-        face_encoding_128 = EmbeddingService.extract_face_encoding(image_array)
-        embedding_128 = face_encoding_128.tolist()
+        face_encoding= EmbeddingService.extract_face_encoding(image_array)
+        embedding= face_encoding.tolist()
 
         thumbnail = ImageProcessor.create_thumbnail(image_array)
 
-        return embedding_128, thumbnail
-
-    @staticmethod
-    async def extract_face_encoding_async(
-        image_base64: str
-    ) -> Tuple[List[float], bytes]:
-        """
-        Extract face encoding asynchronously.
-
-        Args:
-            image_base64: Base64 encoded image string
-
-        Returns:
-            Tuple of (128-dim embedding, thumbnail)
-        """
-        from app.core.async_processing import run_in_threadpool
-        return await run_in_threadpool(
-            FaceRecognitionService.extract_face_encoding,
-            image_base64
-        )
+        return embedding, thumbnail
 
     @staticmethod
     def compare_faces(
         embedding_1: any,
         embedding_2: any,
-        tolerance: Optional[float] = None
+        tolerance: Optional[float] = 0.4
     ) -> Tuple[bool, float]:
         """
         Compare two face embeddings.
@@ -220,7 +201,7 @@ class FaceRecognitionService:
     def compare_two_faces(
         image_base64_1: str,
         image_base64_2: str,
-        tolerance: Optional[float] = None
+        tolerance: Optional[float] = 0.4
     ) -> dict:
         """
         Compare two face images directly.
