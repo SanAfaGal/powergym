@@ -113,39 +113,61 @@ class AttendanceRepository:
         return query.offset(offset).limit(limit).all()
 
     @staticmethod
-    def count_by_client(
+    def has_attendance_today(
             db: Session,
             client_id: UUID,
-            start_date: Optional[datetime] = None,
-            end_date: Optional[datetime] = None
-    ) -> int:
-        """Contar asistencias de un cliente en un período."""
-        query = db.query(func.count(AttendanceModel.id)).filter(
-            AttendanceModel.client_id == client_id
-        )
+            check_date: Optional[date] = None
+    ) -> bool:
+        """
+        Verificar si el cliente ya tiene una asistencia registrada en el día especificado.
 
-        if start_date:
-            query = query.filter(AttendanceModel.check_in >= start_date)
-        if end_date:
-            query = query.filter(AttendanceModel.check_in <= end_date)
+        Args:
+            db: Sesión de base de datos
+            client_id: ID del cliente
+            check_date: Fecha a verificar (por defecto hoy)
 
-        return query.scalar() or 0
+        Returns:
+            True si ya existe una asistencia, False en caso contrario
+        """
+        if check_date is None:
+            check_date = date.today()
+
+        start_of_day = datetime.combine(check_date, datetime.min.time())
+        end_of_day = datetime.combine(check_date, datetime.max.time())
+
+        existing = db.query(AttendanceModel).filter(
+            AttendanceModel.client_id == client_id,
+            AttendanceModel.check_in >= start_of_day,
+            AttendanceModel.check_in <= end_of_day
+        ).first()
+
+        return existing is not None
 
     @staticmethod
-    def get_today(
+    def get_today_attendance(
             db: Session,
-            limit: int = 1000,
-            offset: int = 0
-    ) -> List[tuple]:
-        """Obtener asistencias de hoy con info del cliente."""
-        today = date.today()
-        start_of_day = datetime.combine(today, datetime.min.time())
-        end_of_day = datetime.combine(today, datetime.max.time())
+            client_id: UUID,
+            check_date: Optional[date] = None
+    ) -> Optional[AttendanceModel]:
+        """
+        Obtener la asistencia del cliente para el día especificado.
 
-        return AttendanceRepository.get_with_client_info(
-            db=db,
-            limit=limit,
-            offset=offset,
-            start_date=start_of_day,
-            end_date=end_of_day
-        )
+        Args:
+            db: Sesión de base de datos
+            client_id: ID del cliente
+            check_date: Fecha a buscar (por defecto hoy)
+
+        Returns:
+            AttendanceModel si existe, None en caso contrario
+        """
+        if check_date is None:
+            check_date = date.today()
+
+        start_of_day = datetime.combine(check_date, datetime.min.time())
+        end_of_day = datetime.combine(check_date, datetime.max.time())
+
+        return db.query(AttendanceModel).filter(
+            AttendanceModel.client_id == client_id,
+            AttendanceModel.check_in >= start_of_day,
+            AttendanceModel.check_in <= end_of_day
+        ).first()

@@ -1,8 +1,19 @@
 from datetime import datetime
 from typing import Optional
+from enum import Enum
 from uuid import UUID
 
 from pydantic import BaseModel, Field, ConfigDict
+
+
+class AccessDenialReason(str, Enum):
+    """Razones por las que se puede denegar el acceso a un cliente."""
+
+    CLIENT_NOT_FOUND = "client_not_found"
+    CLIENT_INACTIVE = "client_inactive"
+    NO_SUBSCRIPTION = "no_subscription"
+    SUBSCRIPTION_EXPIRED = "subscription_expired"
+    ALREADY_CHECKED_IN = "already_checked_in"
 
 
 class AttendanceBase(BaseModel):

@@ -27,13 +27,6 @@ class DateTimeUtil:
 class AccessValidationUtil:
     """Utilidades para validación de acceso."""
 
-    CONFIDENCE_THRESHOLD = 0.85
-
-    @staticmethod
-    def is_confidence_valid(confidence: float) -> bool:
-        """Validar que la confianza facial sea suficiente."""
-        return confidence >= AccessValidationUtil.CONFIDENCE_THRESHOLD
-
     @staticmethod
     def format_client_info(client) -> dict:
         """Formatear información del cliente."""

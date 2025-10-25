@@ -26,8 +26,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["attendances"])
 
 
+# ============================================================================
+# IMPORTANTE: Las rutas específicas DEBEN ir ANTES de las rutas con parámetros
+# ============================================================================
+
 @router.post(
-    "/attendances/check-in",
+    "/check-in",
     response_model=CheckInResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Check-in with facial recognition",
@@ -91,13 +95,27 @@ router = APIRouter(tags=["attendances"])
                     }
                 }
             }
+        },
+        409: {
+            "description": "Already checked in today",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": False,
+                        "message": "You have already checked in today",
+                        "can_enter": False,
+                        "reason": "already_checked_in",
+                        "detail": "Last check-in: 2025-10-24T08:30:00Z"
+                    }
+                }
+            }
         }
     }
 )
 def check_in_with_face(
-    request: FaceAuthenticationRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+        request: FaceAuthenticationRequest,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db)
 ):
     """
     Record client entry via facial recognition.
@@ -106,13 +124,15 @@ def check_in_with_face(
     1. Validates image and detects face
     2. Recognizes client via facial recognition
     3. Verifies client status and subscription
-    4. Records attendance if everything is valid
+    4. Checks if already checked in today
+    5. Records attendance if everything is valid
 
     **Response codes:**
     - `201`: Entry recorded successfully (can enter)
     - `400`: Invalid image or no face detected (technical issue)
     - `401`: Face not recognized (client not identified)
     - `403`: Access denied (client/subscription invalid)
+    - `409`: Already checked in today
 
     **Frontend should:**
     - Capture photo from webcam
@@ -143,16 +163,23 @@ def check_in_with_face(
 
     client_id = UUID(face_result.get("client_id"))
 
-    # 2. Validate client access (SYNC)
-    can_access, reason, client_info = AttendanceService.validate_client_access(
+    # 2. Validate client access (SYNC) - Incluye verificación de check-in duplicado
+    can_access, reason, details = AttendanceService.validate_client_access(
         db, client_id
     )
 
-    # If cannot access, return 403 with details
+    # If cannot access, return appropriate error with details
     if not can_access:
+        # 409 para check-in duplicado, 403 para otros casos
+        response_status = (
+            status.HTTP_409_CONFLICT
+            if reason == "already_checked_in"
+            else status.HTTP_403_FORBIDDEN
+        )
+
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=_get_denial_message(reason),
+            status_code=response_status,
+            detail=_get_denial_message(reason, details),
             headers={"X-Denial-Reason": reason}
         )
 
@@ -171,76 +198,8 @@ def check_in_with_face(
         message="Welcome to the gym",
         can_enter=True,
         attendance=attendance,
-        client_info=client_info
+        client_info=details
     )
-
-
-@router.get(
-    "/{attendance_id}",
-    response_model=AttendanceResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Get attendance by ID",
-    description="Retrieves details of a specific attendance record."
-)
-def get_attendance(
-    attendance_id: UUID,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Get full details of an attendance record.
-
-    **Codes:**
-    - `200`: Attendance found
-    - `404`: Attendance does not exist
-    """
-    attendance = AttendanceService.get_by_id(db, attendance_id)
-
-    if not attendance:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Attendance record not found"
-        )
-
-    return attendance
-
-
-@router.get(
-    "/clients/{client_id}/attendances",
-    response_model=list[AttendanceResponse],
-    status_code=status.HTTP_200_OK,
-    summary="Client attendance history",
-    description="Gets all recorded entries for a client with pagination."
-)
-def get_client_attendances(
-    client_id: UUID,
-    limit: int = Query(50, ge=1, le=500, description="Records per page"),
-    offset: int = Query(0, ge=0, description="Skip records"),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Get all entries for a client.
-
-    **Parameters:**
-    - `client_id`: Client UUID
-    - `limit`: Number of records (max 500)
-    - `offset`: For pagination
-
-    **Codes:**
-    - `200`: History retrieved (may be empty list)
-
-    **Frontend can:**
-    - Implement infinite scroll with offset
-    - Show "No records" if returns empty list
-    """
-    attendances = AttendanceService.get_client_attendances(
-        db=db,
-        client_id=client_id,
-        limit=limit,
-        offset=offset
-    )
-    return attendances
 
 
 @router.get(
@@ -251,18 +210,18 @@ def get_client_attendances(
     description="Gets all system attendances with client info (requires admin)."
 )
 def get_all_attendances(
-    limit: int = Query(100, ge=1, le=1000, description="Records per page"),
-    offset: int = Query(0, ge=0, description="Skip records"),
-    start_date: Optional[datetime] = Query(
-        None,
-        description="Start date (ISO 8601): 2025-10-01T00:00:00Z"
-    ),
-    end_date: Optional[datetime] = Query(
-        None,
-        description="End date (ISO 8601): 2025-10-31T23:59:59Z"
-    ),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+        limit: int = Query(100, ge=1, le=1000, description="Records per page"),
+        offset: int = Query(0, ge=0, description="Skip records"),
+        start_date: Optional[datetime] = Query(
+            None,
+            description="Start date (ISO 8601): 2025-10-01T00:00:00Z"
+        ),
+        end_date: Optional[datetime] = Query(
+            None,
+            description="End date (ISO 8601): 2025-10-31T23:59:59Z"
+        ),
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db)
 ):
     """
     Get all system attendances with filters.
@@ -292,105 +251,86 @@ def get_all_attendances(
 
 
 @router.get(
-    "/today",
-    response_model=list[AttendanceWithClientInfo],
+    "/clients/{client_id}",
+    response_model=list[AttendanceResponse],
     status_code=status.HTTP_200_OK,
-    summary="Today's attendances",
-    description="Gets all entries recorded for today."
+    summary="Client attendance history",
+    description="Gets all recorded entries for a client with pagination."
 )
-def get_today_attendances(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+def get_client_attendances(
+        client_id: UUID,
+        limit: int = Query(50, ge=1, le=500, description="Records per page"),
+        offset: int = Query(0, ge=0, description="Skip records"),
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db)
 ):
     """
-    Get all entries for today.
+    Get all entries for a client.
+
+    **Parameters:**
+    - `client_id`: Client UUID
+    - `limit`: Number of records (max 500)
+    - `offset`: For pagination
 
     **Codes:**
-    - `200`: Data retrieved (may be empty list if no entries)
+    - `200`: History retrieved (may be empty list)
 
     **Frontend can:**
-    - Refresh every N seconds for real-time occupancy
-    - Show "No entries today" if returns empty list
-    - Use for gym floor monitoring
+    - Implement infinite scroll with offset
+    - Show "No records" if returns empty list
     """
-    attendances = AttendanceService.get_today_attendances(db)
+    attendances = AttendanceService.get_client_attendances(
+        db=db,
+        client_id=client_id,
+        limit=limit,
+        offset=offset
+    )
     return attendances
 
 
 @router.get(
-    "/clients/{client_id}/attendances/count",
-    response_model=dict,
+    "/{attendance_id}",
+    response_model=AttendanceResponse,
     status_code=status.HTTP_200_OK,
-    summary="Count client attendances",
-    description="Counts entries for a client in a specific period."
+    summary="Get attendance by ID",
+    description="Retrieves details of a specific attendance record."
 )
-def count_client_attendances(
-    client_id: UUID,
-    start_date: Optional[datetime] = Query(
-        None,
-        description="Start date (ISO): 2025-10-01T00:00:00Z"
-    ),
-    end_date: Optional[datetime] = Query(
-        None,
-        description="End date (ISO): 2025-10-31T23:59:59Z"
-    ),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+def get_attendance(
+        attendance_id: UUID,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db)
 ):
     """
-    Count client entries in a period.
-
-    **Parameters:**
-    - `client_id`: Client UUID
-    - `start_date`: Start date (optional)
-    - `end_date`: End date (optional)
-
-    **Response:**
-    ```json
-    {
-        "client_id": "uuid",
-        "total_entries": 15,
-        "period": {
-            "start_date": "2025-10-01",
-            "end_date": "2025-10-31"
-        }
-    }
-    ```
+    Get full details of an attendance record.
 
     **Codes:**
-    - `200`: Count completed (may be 0)
-
-    **Frontend can:**
-    - Show usage statistics
-    - Validate visit quota if exists
-    - Generate monthly reports
+    - `200`: Attendance found
+    - `404`: Attendance does not exist
     """
-    count = AttendanceService.count_client_attendances(
-        db=db,
-        client_id=client_id,
-        start_date=start_date,
-        end_date=end_date
-    )
+    attendance = AttendanceService.get_by_id(db, attendance_id)
 
-    return {
-        "client_id": str(client_id),
-        "total_entries": count,
-        "period": {
-            "start_date": start_date.isoformat() if start_date else None,
-            "end_date": end_date.isoformat() if end_date else None
-        }
-    }
+    if not attendance:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Attendance record not found"
+        )
+
+    return attendance
 
 
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
 
-def _get_denial_message(reason: str) -> str:
+def _get_denial_message(reason: str, details: Optional[dict] = None) -> str:
     """
     Get readable message for access denial.
 
     Maps reason codes to user-facing messages.
+
+    Args:
+        reason: Código de la razón de denegación
+        details: Información adicional sobre la denegación
     """
     messages = {
         "no_subscription": (
@@ -404,9 +344,23 @@ def _get_denial_message(reason: str) -> str:
         ),
         "client_not_found": (
             "Your profile was not found in the system."
+        ),
+        "already_checked_in": (
+            f"You have already checked in today at "
+            f"{details.get('check_in_time', 'earlier today') if details else 'earlier today'}. "
+            "See you tomorrow!"
         )
     }
-    return messages.get(
+
+    base_message = messages.get(
         reason,
         "Access denied. Please contact administration."
     )
+
+    # Agregar detalles adicionales si están disponibles
+    if details and reason == "subscription_expired":
+        expired_date = details.get("expired_date", "")
+        if expired_date:
+            return f"{base_message} (Expired: {expired_date})"
+
+    return base_message

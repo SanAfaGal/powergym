@@ -12,9 +12,9 @@ from app.repositories.attendance_repository import AttendanceRepository
 from app.schemas.attendance import (
     AttendanceResponse,
     AttendanceWithClientInfo,
+    AccessDenialReason
 )
 from app.db.models import ClientModel, SubscriptionModel
-from app.enums.attendance import AccessDenialReason
 from app.utils.attendance import AccessValidationUtil
 
 
@@ -126,40 +126,6 @@ class AttendanceService:
         ]
 
     @staticmethod
-    def get_today_attendances(
-            db: Session,
-            limit: int = 1000,
-            offset: int = 0
-    ) -> List[AttendanceWithClientInfo]:
-        """Obtener asistencias de hoy."""
-        rows = AttendanceRepository.get_today(db, limit, offset)
-
-        return [
-            AttendanceWithClientInfo(
-                id=att.id,
-                client_id=att.client_id,
-                check_in=att.check_in,
-                meta_info=att.meta_info,
-                client_first_name=first_name,
-                client_last_name=last_name,
-                client_dni_number=dni_number
-            )
-            for att, first_name, last_name, dni_number in rows
-        ]
-
-    @staticmethod
-    def count_client_attendances(
-            db: Session,
-            client_id: UUID,
-            start_date: Optional[datetime] = None,
-            end_date: Optional[datetime] = None
-    ) -> int:
-        """Contar asistencias de un cliente."""
-        return AttendanceRepository.count_by_client(
-            db, client_id, start_date, end_date
-        )
-
-    @staticmethod
     def validate_client_access(
             db: Session,
             client_id: UUID
@@ -181,13 +147,25 @@ class AttendanceService:
         if not client.is_active:
             return False, AccessDenialReason.CLIENT_INACTIVE, None
 
-        # 2. Suscripción activa
+        # 2. Verificar si ya tiene asistencia hoy
+        if AttendanceRepository.has_attendance_today(db, client_id):
+            existing_attendance = AttendanceRepository.get_today_attendance(db, client_id)
+            return (
+                False,
+                AccessDenialReason.ALREADY_CHECKED_IN,
+                {
+                    "check_in_time": existing_attendance.check_in.isoformat(),
+                    "client_info": AccessValidationUtil.format_client_info(client)
+                }
+            )
+
+        # 3. Suscripción activa
         subscription = AttendanceService._get_active_subscription(db, client_id)
 
         if not subscription:
             return False, AccessDenialReason.NO_SUBSCRIPTION, None
 
-        # 3. Suscripción no expirada
+        # 4. Suscripción no expirada
         if subscription.end_date < datetime.now().date():
             return (
                 False,
