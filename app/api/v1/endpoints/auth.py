@@ -9,7 +9,6 @@ from app.core.security import (
     create_access_token,
     create_refresh_token,
     decode_token,
-    verify_password
 )
 from app.schemas.token import Token, RefreshTokenRequest
 from app.schemas.user import UserCreate, User, UserInDB
