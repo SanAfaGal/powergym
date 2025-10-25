@@ -3,7 +3,7 @@ Core face recognition service combining all operations.
 Provides high-level API for face registration, authentication, and comparison.
 """
 
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Any
 from uuid import UUID
 from sqlalchemy.orm import Session
 
@@ -31,8 +31,8 @@ class FaceRecognitionService:
         """
         image_array = ImageProcessor.decode_base64_image(image_base64)
 
-        face_encoding= EmbeddingService.extract_face_encoding(image_array)
-        embedding= face_encoding.tolist()
+        face_encoding = EmbeddingService.extract_face_encoding(image_array)
+        embedding = face_encoding.tolist()
 
         thumbnail = ImageProcessor.create_thumbnail(image_array)
 
@@ -40,9 +40,9 @@ class FaceRecognitionService:
 
     @staticmethod
     def compare_faces(
-        embedding_1: any,
-        embedding_2: any,
-        tolerance: Optional[float] = 0.4
+            embedding_1: Any,
+            embedding_2: Any,
+            tolerance: Optional[float] = 0.4
     ) -> Tuple[bool, float]:
         """
         Compare two face embeddings.
@@ -99,9 +99,9 @@ class FaceRecognitionService:
 
     @staticmethod
     def authenticate_face(
-        db: Session,
-        image_base64: str,
-        tolerance: Optional[float] = None
+            db: Session,
+            image_base64: str,
+            tolerance: Optional[float] = None
     ) -> dict:
         """
         Authenticate a client by face image using vector similarity search.
@@ -199,9 +199,9 @@ class FaceRecognitionService:
 
     @staticmethod
     def compare_two_faces(
-        image_base64_1: str,
-        image_base64_2: str,
-        tolerance: Optional[float] = 0.4
+            image_base64_1: str,
+            image_base64_2: str,
+            tolerance: Optional[float] = 0.4
     ) -> dict:
         """
         Compare two face images directly.

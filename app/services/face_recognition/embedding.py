@@ -3,13 +3,12 @@ Embedding generation and comparison utilities for face recognition.
 Handles face encoding extraction and similarity calculations using InsightFace.
 """
 
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Any
 import numpy as np
 import cv2
 from insightface.app import FaceAnalysis
 
 from app.core.config import settings
-from app.core.async_processing import run_in_threadpool
 
 
 class EmbeddingService:
@@ -81,23 +80,7 @@ class EmbeddingService:
         return embedding.astype(np.float64)
 
     @staticmethod
-    async def extract_face_encoding_async(image_array: np.ndarray) -> np.ndarray:
-        """
-        Extract face encoding asynchronously.
-
-        Args:
-            image_array: Image as numpy array in RGB format
-
-        Returns:
-            512-dimensional face encoding as numpy array
-        """
-        return await run_in_threadpool(
-            EmbeddingService.extract_face_encoding,
-            image_array
-        )
-
-    @staticmethod
-    def validate_embedding(embedding: any) -> np.ndarray:
+    def validate_embedding(embedding: Any) -> np.ndarray:
         """
         Validate and convert embedding to numpy array with correct dimensions.
 
@@ -132,7 +115,7 @@ class EmbeddingService:
         return embedding_array
 
     @staticmethod
-    def parse_embedding(embedding: any) -> List[float]:
+    def parse_embedding(embedding: Any) -> List[float]:
         """
         Parse embedding from various formats to list of floats.
 
@@ -174,9 +157,9 @@ class EmbeddingService:
 
     @staticmethod
     def compare_embeddings(
-        embedding_1: any,
-        embedding_2: any,
-        tolerance: Optional[float] = None
+            embedding_1: Any,
+            embedding_2: Any,
+            tolerance: Optional[float] = None
     ) -> Tuple[bool, float]:
         """
         Compare two face embeddings for similarity using cosine similarity.
@@ -228,8 +211,8 @@ class EmbeddingService:
 
     @staticmethod
     def calculate_euclidean_distance(
-        embedding_1: List[float],
-        embedding_2: List[float]
+            embedding_1: List[float],
+            embedding_2: List[float]
     ) -> float:
         """
         Calculate Euclidean distance between two embeddings.
@@ -253,8 +236,8 @@ class EmbeddingService:
 
     @staticmethod
     def calculate_cosine_similarity(
-        embedding_1: List[float],
-        embedding_2: List[float]
+            embedding_1: List[float],
+            embedding_2: List[float]
     ) -> float:
         """
         Calculate cosine similarity between two embeddings.
@@ -409,9 +392,9 @@ class EmbeddingService:
 
     @staticmethod
     def find_best_match(
-        query_embedding: any,
-        candidate_embeddings: List[any],
-        tolerance: Optional[float] = None
+            query_embedding: Any,
+            candidate_embeddings: List[Any],
+            tolerance: Optional[float] = None
     ) -> Tuple[Optional[int], float]:
         """
         Encontrar la mejor coincidencia entre un embedding de consulta y una lista de candidatos.
@@ -447,59 +430,3 @@ class EmbeddingService:
             return None, best_similarity
 
         return best_index, best_similarity
-
-    @staticmethod
-    async def get_face_quality_score_async(image_array: np.ndarray) -> dict:
-        """
-        Evaluar la calidad de una imagen facial de forma asíncrona.
-
-        Args:
-            image_array: Image as numpy array in RGB format
-
-        Returns:
-            Dictionary con métricas de calidad
-        """
-        return await run_in_threadpool(
-            EmbeddingService.get_face_quality_score,
-            image_array
-        )
-
-    @staticmethod
-    async def extract_multiple_faces_async(image_array: np.ndarray) -> List[dict]:
-        """
-        Detectar y extraer embeddings de múltiples caras de forma asíncrona.
-
-        Args:
-            image_array: Image as numpy array in RGB format
-
-        Returns:
-            Lista de diccionarios con información de cada cara
-        """
-        return await run_in_threadpool(
-            EmbeddingService.extract_multiple_faces,
-            image_array
-        )
-
-    @staticmethod
-    async def find_best_match_async(
-        query_embedding: any,
-        candidate_embeddings: List[any],
-        tolerance: Optional[float] = None
-    ) -> Tuple[Optional[int], float]:
-        """
-        Encontrar la mejor coincidencia de forma asíncrona.
-
-        Args:
-            query_embedding: Embedding a buscar
-            candidate_embeddings: Lista de embeddings candidatos
-            tolerance: Umbral de similitud mínimo
-
-        Returns:
-            Tuple of (best_match_index: Optional[int], best_similarity: float)
-        """
-        return await run_in_threadpool(
-            EmbeddingService.find_best_match,
-            query_embedding,
-            candidate_embeddings,
-            tolerance
-        )
