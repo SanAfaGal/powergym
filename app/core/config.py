@@ -1,7 +1,7 @@
 from typing import List, Optional
-from pydantic import field_validator, Field
+from pydantic import Field
 from pydantic_settings import BaseSettings
-
+import pytz
 
 class Settings(BaseSettings):
     """Configuración de PowerGym Backend"""
