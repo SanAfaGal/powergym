@@ -148,8 +148,8 @@ class AttendanceService:
             return False, AccessDenialReason.CLIENT_INACTIVE, None
 
         # 2. Verificar si ya tiene asistencia hoy
-        if AttendanceRepository.has_attendance_today(db, client_id):
-            existing_attendance = AttendanceRepository.get_today_attendance(db, client_id)
+        existing_attendance = AttendanceRepository.get_today_attendance(db, client_id)
+        if existing_attendance:
             return (
                 False,
                 AccessDenialReason.ALREADY_CHECKED_IN,

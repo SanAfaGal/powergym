@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import AttendanceModel, ClientModel
+from app.utils.timezone import get_date_range_utc
 
 
 class AttendanceRepository:
@@ -112,42 +113,12 @@ class AttendanceRepository:
 
         return query.offset(offset).limit(limit).all()
 
-    @staticmethod
-    def has_attendance_today(
-            db: Session,
-            client_id: UUID,
-            check_date: Optional[date] = None
-    ) -> bool:
-        """
-        Verificar si el cliente ya tiene una asistencia registrada en el día especificado.
-
-        Args:
-            db: Sesión de base de datos
-            client_id: ID del cliente
-            check_date: Fecha a verificar (por defecto hoy)
-
-        Returns:
-            True si ya existe una asistencia, False en caso contrario
-        """
-        if check_date is None:
-            check_date = date.today()
-
-        start_of_day = datetime.combine(check_date, datetime.min.time())
-        end_of_day = datetime.combine(check_date, datetime.max.time())
-
-        existing = db.query(AttendanceModel).filter(
-            AttendanceModel.client_id == client_id,
-            AttendanceModel.check_in >= start_of_day,
-            AttendanceModel.check_in <= end_of_day
-        ).first()
-
-        return existing is not None
 
     @staticmethod
     def get_today_attendance(
             db: Session,
             client_id: UUID,
-            check_date: Optional[date] = None
+            check_date: Optional[datetime] = None
     ) -> Optional[AttendanceModel]:
         """
         Obtener la asistencia del cliente para el día especificado.
@@ -161,13 +132,17 @@ class AttendanceRepository:
             AttendanceModel si existe, None en caso contrario
         """
         if check_date is None:
-            check_date = date.today()
+            check_date = datetime.now()
 
-        start_of_day = datetime.combine(check_date, datetime.min.time())
-        end_of_day = datetime.combine(check_date, datetime.max.time())
+        # ✅ Convert local date to UTC range
+        day_start_utc, day_end_utc = get_date_range_utc(check_date)
+
+        print(check_date.isoformat())
+        print("Day Start UTC: " + day_start_utc.isoformat())
+        print("Day End UTC: " + day_end_utc.isoformat())
 
         return db.query(AttendanceModel).filter(
             AttendanceModel.client_id == client_id,
-            AttendanceModel.check_in >= start_of_day,
-            AttendanceModel.check_in <= end_of_day
+            AttendanceModel.check_in >= day_start_utc,
+            AttendanceModel.check_in <= day_end_utc
         ).first()
