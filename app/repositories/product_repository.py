@@ -257,6 +257,7 @@ class ProductRepository:
         """
         return self.db.query(ProductModel).filter(
             and_(
+                ProductModel.available_quantity > 0,
                 ProductModel.available_quantity < ProductModel.min_stock,
                 ProductModel.is_active == True
             )

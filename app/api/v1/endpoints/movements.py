@@ -30,6 +30,33 @@ router = APIRouter(prefix="/movements", tags=["Movements"])
     "/{movement_id}",
     response_model=InventoryMovementResponse,
     summary="Get movement by ID",
+    responses={
+        200: {
+            "description": "Movement found",
+            "model": InventoryMovementResponse,
+            "content": {
+                "application/json": {
+                    "example": {
+                        "id": "mov-uuid-1",
+                        "product_id": "prod-uuid-1",
+                        "movement_type": "EXIT",
+                        "quantity": -15,
+                        "movement_date": "2025-01-15T12:30:00Z",
+                        "responsible": "juan",
+                        "notes": "Sale transaction #1234"
+                    }
+                }
+            }
+        },
+        404: {
+            "description": "Movement not found",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Movement mov-uuid-xyz not found"}
+                }
+            }
+        },
+    }
 )
 def get_movement(
         movement_id: str,
@@ -39,16 +66,23 @@ def get_movement(
     """
     Retrieve movement by ID.
 
-    Args:
-        movement_id: Movement UUID
-        db: Database session
-        current_user: Authenticated user
+    **Permissions:** Any authenticated user
 
-    Returns:
-        InventoryMovementResponse
+    **Path Parameters:**
+    - movement_id: Movement UUID (required)
 
-    Raises:
-        HTTPException 404: If movement not found
+    **Response Schema (InventoryMovementResponse):**
+    - id: Movement unique identifier
+    - product_id: Associated product UUID
+    - movement_type: Type of movement (ENTRY, EXIT, ADJUSTMENT)
+    - quantity: Amount moved (positive for ENTRY, negative for EXIT, any for ADJUSTMENT)
+    - movement_date: Timestamp when movement was recorded (UTC, auto-converted to local timezone)
+    - responsible: Username of person responsible for movement (optional)
+    - notes: Additional notes or comments (optional)
+
+    **Error Cases:**
+    - 404: Movement not found
+    - 401: Unauthorized (not authenticated)
     """
     logger.debug(f"User {current_user.username} fetching movement: {movement_id}")
     service = MovementService(db)
@@ -68,24 +102,84 @@ def get_movement(
     "",
     response_model=dict,
     summary="List all movements with pagination",
+    responses={
+        200: {
+            "description": "List of movements",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "skip": 0,
+                        "limit": 100,
+                        "total": 245,
+                        "items": [
+                            {
+                                "id": "mov-uuid-1",
+                                "product_id": "prod-uuid-1",
+                                "movement_type": "EXIT",
+                                "quantity": -15,
+                                "movement_date": "2025-01-15T12:30:00Z",
+                                "responsible": "juan",
+                                "notes": "Sale transaction"
+                            },
+                            {
+                                "id": "mov-uuid-2",
+                                "product_id": "prod-uuid-1",
+                                "movement_type": "ENTRY",
+                                "quantity": 100,
+                                "movement_date": "2025-01-15T10:00:00Z",
+                                "responsible": None,
+                                "notes": "Stock replenishment"
+                            },
+                            {
+                                "id": "mov-uuid-3",
+                                "product_id": "prod-uuid-2",
+                                "movement_type": "ADJUSTMENT",
+                                "quantity": -5,
+                                "movement_date": "2025-01-14T16:45:00Z",
+                                "responsible": "admin",
+                                "notes": "Inventory count adjustment"
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    }
 )
 def list_movements(
-        skip: int = Query(0, ge=0),
-        limit: int = Query(100, ge=1, le=100),
+        skip: int = Query(0, ge=0, description="Number of movements to skip (pagination offset)"),
+        limit: int = Query(100, ge=1, le=100, description="Maximum movements per page (max: 100)"),
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_active_user),
 ) -> dict:
     """
     List all movements with pagination.
 
-    Args:
-        skip: Number of movements to skip
-        limit: Maximum movements per page (max: 100)
-        db: Database session
-        current_user: Authenticated user
+    **Permissions:** Any authenticated user
 
-    Returns:
-        Dictionary with movements list and total count
+    Returns paginated list of all inventory movements sorted by date (newest first).
+
+    **Query Parameters:**
+    - skip: Number of movements to skip for pagination (default: 0)
+    - limit: Maximum movements to return per page (default: 100, max: 100)
+
+    **Response Schema:**
+    - skip: Pagination offset used in query
+    - limit: Pagination limit used in query
+    - total: Total count of all movements available
+    - items: Array of InventoryMovementResponse objects
+
+    **InventoryMovementResponse fields:**
+    - id: Movement unique identifier
+    - product_id: Associated product UUID
+    - movement_type: Type of movement (ENTRY, EXIT, ADJUSTMENT)
+    - quantity: Amount moved
+    - movement_date: Timestamp in UTC (auto-converted to local timezone in response)
+    - responsible: Person responsible (optional)
+    - notes: Additional notes (optional)
+
+    **Error Cases:**
+    - 401: Unauthorized (not authenticated)
     """
     logger.debug(
         f"User {current_user.username} listing movements: skip={skip}, limit={limit}"

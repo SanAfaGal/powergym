@@ -1,9 +1,3 @@
-"""
-Product Endpoints Module
-
-FastAPI routes for product management.
-"""
-
 import logging
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -33,27 +27,46 @@ router = APIRouter(prefix="/products", tags=["Products"])
     response_model=ProductResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new product",
+    responses={
+        201: {
+            "description": "Product created successfully",
+            "model": ProductResponse,
+        },
+        400: {
+            "description": "Validation error",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Max stock must be greater than or equal to min stock"
+                    }
+                }
+            }
+        },
+    }
 )
 def create_product(
-    product_data: ProductCreate,
-    db: Session = Depends(get_db),
-    current_user: Annotated[User, Depends(get_current_admin_user)] = None,
+        product_data: ProductCreate,
+        db: Session = Depends(get_db),
+        current_user: Annotated[User, Depends(get_current_admin_user)] = None,
 ) -> ProductResponse:
     """
     Create a new product.
 
     **Required permissions:** Admin
 
-    Args:
-        product_data: ProductCreate schema with product details
-        db: Database session
-        current_user: Authenticated admin user
+    **Request Body:**
+    - name: Product name (1-150 chars, required)
+    - description: Optional product description (max 500 chars)
+    - capacity_value: Capacity/volume (required, must be > 0)
+    - unit_type: Unit of measurement like 'ml', 'bottle', 'can' (required)
+    - price: Product price (required, >= 0)
+    - currency: Currency code (default: 'COP')
+    - photo_url: Optional product image URL
+    - min_stock: Minimum stock threshold (default: 5.00)
+    - max_stock: Maximum stock capacity (optional)
 
-    Returns:
-        Created ProductResponse
-
-    Raises:
-        HTTPException 400: If validation fails
+    **Response:**
+    Returns the created ProductResponse with generated ID and timestamps.
     """
     try:
         logger.info(f"Admin {current_user.username} creating product: {product_data.name}")
@@ -83,25 +96,40 @@ def create_product(
     "/{product_id}",
     response_model=ProductResponse,
     summary="Get product by ID",
+    responses={
+        200: {
+            "description": "Product found",
+            "model": ProductResponse,
+        },
+        404: {
+            "description": "Product not found",
+        },
+    }
 )
 def get_product(
-    product_id: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+        product_id: str,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_active_user),
 ) -> ProductResponse:
     """
     Retrieve a product by ID.
 
-    Args:
-        product_id: Product UUID
-        db: Database session
-        current_user: Authenticated user
-
-    Returns:
-        ProductResponse
-
-    Raises:
-        HTTPException 404: If product not found
+    **Response Schema:**
+    - id: Product unique identifier
+    - name: Product name
+    - description: Product description
+    - capacity_value: Capacity value
+    - unit_type: Unit type
+    - price: Product price
+    - currency: Currency code
+    - photo_url: Product image URL
+    - available_quantity: Current stock
+    - min_stock: Minimum stock threshold
+    - max_stock: Maximum stock capacity
+    - stock_status: Current stock status (NORMAL, LOW, OUT_OF_STOCK, OVERSTOCK)
+    - is_active: Whether product is active
+    - created_at: Creation timestamp (UTC)
+    - updated_at: Last update timestamp (UTC)
     """
     logger.debug(f"User {current_user.username} fetching product: {product_id}")
     service = ProductService(db)
@@ -121,26 +149,60 @@ def get_product(
     "",
     response_model=dict,
     summary="List all products with pagination",
+    responses={
+        200: {
+            "description": "List of products",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "skip": 0,
+                        "limit": 100,
+                        "total": 5,
+                        "items": [
+                            {
+                                "id": "uuid-1",
+                                "name": "Coca Cola 350ml",
+                                "description": "Soft drink",
+                                "capacity_value": 350,
+                                "unit_type": "ml",
+                                "price": 2500,
+                                "currency": "COP",
+                                "photo_url": "https://example.com/coke.jpg",
+                                "available_quantity": 50,
+                                "min_stock": 10,
+                                "max_stock": 200,
+                                "stock_status": "NORMAL",
+                                "is_active": True,
+                                "created_at": "2025-01-15T10:30:00Z",
+                                "updated_at": "2025-01-15T10:30:00Z"
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    }
 )
 def list_products(
-    skip: int = Query(0, ge=0, description="Number of items to skip"),
-    limit: int = Query(100, ge=1, le=100, description="Max items per page"),
-    active_only: bool = Query(True, description="Only return active products"),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+        skip: int = Query(0, ge=0, description="Number of items to skip"),
+        limit: int = Query(100, ge=1, le=100, description="Max items per page"),
+        active_only: bool = Query(True, description="Only return active products"),
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_active_user),
 ) -> dict:
     """
     List all products with pagination.
 
-    Args:
-        skip: Number of products to skip (default: 0)
-        limit: Maximum products per page (default: 100, max: 100)
-        active_only: If true, only return active products (default: true)
-        db: Database session
-        current_user: Authenticated user
+    **Query Parameters:**
+    - skip: Number of products to skip (default: 0)
+    - limit: Maximum products per page (default: 100, max: 100)
+    - active_only: If true, only return active products (default: true)
 
-    Returns:
-        Dictionary with products list and total count
+    **Response Schema:**
+    - skip: Pagination offset used
+    - limit: Pagination limit used
+    - total: Total count of products matching filter
+    - items: Array of ProductResponse objects
     """
     logger.debug(f"User {current_user.username} listing products: skip={skip}, limit={limit}")
     service = ProductService(db)
@@ -158,26 +220,30 @@ def list_products(
     "/search",
     response_model=list[ProductResponse],
     summary="Search products",
+    responses={
+        200: {
+            "description": "Search results",
+            "model": list[ProductResponse],
+        },
+    }
 )
 def search_products(
-    q: str = Query(..., min_length=1, description="Search query"),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=100),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+        q: str = Query(..., min_length=1, description="Search query"),
+        skip: int = Query(0, ge=0),
+        limit: int = Query(100, ge=1, le=100),
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_active_user),
 ) -> list[ProductResponse]:
     """
     Search products by name or description.
 
-    Args:
-        q: Search query (required)
-        skip: Pagination offset
-        limit: Maximum results
-        db: Database session
-        current_user: Authenticated user
+    **Query Parameters:**
+    - q: Search query (required, min 1 character)
+    - skip: Pagination offset
+    - limit: Maximum results (max: 100)
 
-    Returns:
-        List of matching ProductResponse instances
+    **Response Schema:**
+    Array of ProductResponse objects matching the search query.
     """
     logger.debug(f"User {current_user.username} searching products: {q}")
     service = ProductService(db)
@@ -192,32 +258,35 @@ def search_products(
     "/{product_id}",
     response_model=ProductResponse,
     summary="Update a product",
+    responses={
+        200: {
+            "description": "Product updated successfully",
+            "model": ProductResponse,
+        },
+        404: {
+            "description": "Product not found",
+        },
+        400: {
+            "description": "Validation error",
+        }
+    }
 )
 def update_product(
-    product_id: str,
-    product_data: ProductUpdate,
-    db: Session = Depends(get_db),
-    current_user: Annotated[User, Depends(get_current_admin_user)] = None,
+        product_id: str,
+        product_data: ProductUpdate,
+        db: Session = Depends(get_db),
+        current_user: Annotated[User, Depends(get_current_admin_user)] = None,
 ) -> ProductResponse:
     """
     Update a product.
 
     **Required permissions:** Admin
 
+    **Request Body (all fields optional):**
     Only provided fields will be updated (partial update).
 
-    Args:
-        product_id: Product UUID
-        product_data: ProductUpdate schema with updated fields
-        db: Database session
-        current_user: Authenticated admin user
-
-    Returns:
-        Updated ProductResponse
-
-    Raises:
-        HTTPException 404: If product not found
-        HTTPException 400: If validation fails
+    **Response Schema:**
+    Returns the updated ProductResponse with all fields.
     """
     try:
         logger.info(f"Admin {current_user.username} updating product: {product_id}")
@@ -249,11 +318,19 @@ def update_product(
     "/{product_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Deactivate a product",
+    responses={
+        204: {
+            "description": "Product deactivated successfully",
+        },
+        404: {
+            "description": "Product not found",
+        }
+    }
 )
 def deactivate_product(
-    product_id: str,
-    db: Session = Depends(get_db),
-    current_user: Annotated[User, Depends(get_current_admin_user)] = None,
+        product_id: str,
+        db: Session = Depends(get_db),
+        current_user: Annotated[User, Depends(get_current_admin_user)] = None,
 ) -> None:
     """
     Deactivate a product (soft delete).
@@ -262,13 +339,8 @@ def deactivate_product(
 
     The product is marked as inactive but not deleted from the database.
 
-    Args:
-        product_id: Product UUID
-        db: Database session
-        current_user: Authenticated admin user
-
-    Raises:
-        HTTPException 404: If product not found
+    **Response:**
+    No content returned (204 status code).
     """
     logger.info(f"Admin {current_user.username} deactivating product: {product_id}")
     service = ProductService(db)

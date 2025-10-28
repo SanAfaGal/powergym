@@ -75,7 +75,7 @@ class InventoryMovementCreate(BaseModel):
     """Schema para crear un movimiento de inventario"""
     product_id: str = Field(..., min_length=1)
     movement_type: InventoryMovementTypeEnum
-    quantity: Decimal = Field(..., gt=0, decimal_places=2)
+    quantity: Decimal = Field(..., decimal_places=2)
     responsible: Optional[str] = Field(None, min_length=1)
     notes: Optional[str] = Field(None, max_length=500)
 
@@ -105,23 +105,6 @@ class InventoryMovementDetailResponse(InventoryMovementResponse):
     """Schema detallado con info del producto"""
     product: Optional[ProductResponse] = None
     model_config = ConfigDict(from_attributes=True)
-
-
-# ============================================================
-# BULK OPERATIONS
-# ============================================================
-class BulkMovementCreate(BaseModel):
-    """Schema para múltiples movimientos"""
-    movements: list[InventoryMovementCreate] = Field(..., min_items=1)
-
-
-class BulkMovementResponse(BaseModel):
-    """Respuesta de operación bulk"""
-    total: int
-    successful: int
-    failed: int
-    movements: list[InventoryMovementDetailResponse] = []
-    errors: list[dict] = []
 
 
 # ============================================================
