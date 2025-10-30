@@ -81,7 +81,7 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_products_is_active'), 'products', ['is_active'], unique=False)
     op.create_index(op.f('ix_products_name'), 'products', ['name'], unique=False)
-    op.create_index(op.f('ix_products_stock_status_enum'), 'products', ['stock_status_enum'], unique=False)
+    op.create_index(op.f('ix_products_stock_status'), 'products', ['stock_status'], unique=False)
     op.create_table('users',
     sa.Column('username', sa.String(), nullable=False),
     sa.Column('email', sa.String(), nullable=True),
@@ -198,7 +198,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_users_username'), table_name='users')
     op.drop_index(op.f('ix_users_email'), table_name='users')
     op.drop_table('users')
-    op.drop_index(op.f('ix_products_stock_status_enum'), table_name='products')
+    op.drop_index(op.f('ix_products_stock_status'), table_name='products')
     op.drop_index(op.f('ix_products_name'), table_name='products')
     op.drop_index(op.f('ix_products_is_active'), table_name='products')
     op.drop_table('products')
